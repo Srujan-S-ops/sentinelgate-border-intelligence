@@ -191,8 +191,11 @@ export default function Home() {
         const key = (countryName || "").toLowerCase().replace(/\s/g, '')
 
         // 🚨 ZERO TOLERANCE CUSTOM RULES
-        if (nameLower === "xxx" || key === "yyy") {
-            return 100 // Automatic RED Alert
+        if (nameLower === "xxx") {
+            return 100 // Automatic RED Alert (100 risk)
+        }
+        if (key === "yyy") {
+            return 50 // Automatic YELLOW Warning (50 risk - Secondary Check)
         }
 
         // 1️⃣ Country Risk (Base mapped risk + Extreme Nations penalty)
