@@ -1,62 +1,115 @@
+@import "tailwindcss";
+
 body {
   margin: 0;
-  font-family: "Segoe UI", Arial, sans-serif;
-  background: linear-gradient(135deg,#0f2027,#203a43,#2c5364);
+  font-family: var(--font-geist-sans), "Segoe UI", Arial, sans-serif;
   min-height: 100vh;
+  background-color: #020617;
+  /* Very dark slate */
+  background-image:
+    radial-gradient(ellipse at top left, rgba(30, 58, 138, 0.4) 0%, transparent 40%),
+    radial-gradient(ellipse at bottom right, rgba(15, 118, 110, 0.3) 0%, transparent 40%);
+  background-attachment: fixed;
+  color: #f8fafc;
 }
 
-/* dashboard container */
-.dashboard {
-  padding: 40px;
-  color: white;
+/* Custom Scrollbar for sleekness */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-/* cards */
-.card {
-  background: rgba(255,255,255,0.08);
-  backdrop-filter: blur(10px);
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
 }
 
-/* buttons */
-button {
-  border: none;
-  cursor: pointer;
-  transition: 0.2s;
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
 }
 
-button:hover {
-  transform: scale(1.05);
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
-/* table */
-table {
-  background: rgba(255,255,255,0.08);
-  backdrop-filter: blur(10px);
-  border-radius: 10px;
-  overflow: hidden;
+/* Map specific tweaks */
+.rsm-geography {
+  outline: none;
 }
 
-th {
-  background: rgba(0,0,0,0.4);
-  padding: 10px;
+/* Animated Map Lines */
+@keyframes dash {
+  from {
+    stroke-dashoffset: 100;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
-td {
-  padding: 10px;
+/* Face Scan Animations */
+@keyframes scan-line {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(240px);
+    opacity: 0;
+  }
 }
 
-/* threat panel */
-.threat {
-  background: rgba(255,0,0,0.2);
-  border-left: 5px solid red;
+.animate-scan-line {
+  animation: scan-line 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-/* map container */
-.map {
-  background: rgba(255,255,255,0.08);
-  border-radius: 10px;
-  padding: 10px;
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.3s ease-out forwards;
+}
+
+/* Siren Critical Alert */
+@keyframes siren-glow {
+  0% {
+    box-shadow: 0 0 10px rgba(225, 29, 72, 0.2);
+    background-color: rgba(225, 29, 72, 0.05);
+    border-color: rgba(225, 29, 72, 0.3);
+  }
+
+  50% {
+    box-shadow: 0 0 35px rgba(225, 29, 72, 0.6);
+    background-color: rgba(225, 29, 72, 0.3);
+    border-color: rgba(225, 29, 72, 0.8);
+  }
+
+  100% {
+    box-shadow: 0 0 10px rgba(225, 29, 72, 0.2);
+    background-color: rgba(225, 29, 72, 0.05);
+    border-color: rgba(225, 29, 72, 0.3);
+  }
+}
+
+.animate-siren {
+  animation: siren-glow 1.5s ease-in-out infinite;
 }
