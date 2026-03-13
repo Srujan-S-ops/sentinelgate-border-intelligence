@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { useState, useRef, useCallback, useEffect } from "react"
 import { Pie } from "react-chartjs-2"
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js"
@@ -19,6 +20,7 @@ import {
     FiUserX
 } from "react-icons/fi"
 import Webcam from "react-webcam"
+import { GiCrossedSwords } from "react-icons/gi"
 import { supabase } from "@/lib/supabase"
 import Script from "next/script"
 
@@ -259,11 +261,11 @@ export default function Home() {
                 risk: traveler.risk,
                 note: traveler.note || "System Alert generated from Risk parameters"
             }
-            
+
             // local optimisitic update
             const newLocalThreat = { ...threat, time: new Date().toLocaleTimeString() }
             setThreats(prev => [newLocalThreat, ...prev.slice(0, 4)])
-            
+
             // remote push
             await supabase.from('threats').insert([threat])
         }
@@ -358,7 +360,7 @@ export default function Home() {
         setIsScanning(true)
         setScanResult(null)
 
-        const img = new Image()
+        const img = new window.Image()
         img.src = imageSrc
         img.onload = async () => {
             try {
@@ -368,14 +370,14 @@ export default function Home() {
                 // Detect the user's face from the webcam snapshot
                 const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor()
                 setIsScanning(false)
-                
+
                 let isMatch = false
                 let distance = 1.0
 
                 if (detection && trumpDescriptor) {
                     distance = faceapi.euclideanDistance(detection.descriptor, trumpDescriptor)
                     console.log(`[Face-API] Biometric Distance to Target: ${distance}`)
-                    
+
                     // A typical distance threshold for face-api.js is 0.6. Below 0.6 is considered a match.
                     if (distance < 0.55) {
                         isMatch = true
@@ -409,7 +411,7 @@ export default function Home() {
                     setScanResult({
                         match: false,
                         risk: 10,
-                        message: detection 
+                        message: detection
                             ? "Biometrics verified. No Interpol or Watchlist matches found for this face."
                             : "No clear face detected in the frame. Please try again."
                     })
@@ -448,25 +450,26 @@ export default function Home() {
             {/* HEADER */}
             <header className="flex flex-col xl:flex-row items-center justify-between mb-8 p-6 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl">
                 <div className="flex items-center gap-4">
-                    <div className="p-3 bg-indigo-500/20 rounded-xl border border-indigo-500/30 text-indigo-400">
-                        <FiShield className="w-8 h-8" />
-                    </div>
                     <div>
                         <div className="flex items-center gap-3">
-                            <h1 className="text-3xl tracking-tight font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
+                            <div className="flex items-center justify-center p-2.5 bg-gradient-to-br from-indigo-500 via-blue-500 to-emerald-500 rounded-xl shadow-[0_0_20px_rgba(56,189,248,0.4)] border border-white/20 relative">
+                                <GiCrossedSwords className="w-10 h-10 text-slate-900/40 absolute mt-1" />
+                                <FiShield className="w-7 h-7 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] relative z-10" />
+                            </div>
+                            <h1 className="text-3xl tracking-tight font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 pt-1">
                                 SentinelGate Intelligence
                             </h1>
                             {dbStatus === "connecting" && (
-                                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-slate-500/20 text-slate-400 border border-slate-500/30 animate-pulse">Connecting API...</span>
+                                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-slate-500/20 text-slate-400 border border-slate-500/30 animate-pulse mt-1">Connecting API...</span>
                             )}
                             {dbStatus === "connected" && (
-                                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Backend Active</span>
+                                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 mt-1">Backend Active</span>
                             )}
                             {dbStatus === "error" && (
-                                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-rose-500/20 text-rose-400 border border-rose-500/30">DB Error (Check Console)</span>
+                                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-rose-500/20 text-rose-400 border border-rose-500/30 mt-1">DB Error (Check Console)</span>
                             )}
                         </div>
-                        <p className="text-slate-400 text-sm font-medium tracking-wider uppercase mt-1">
+                        <p className="text-slate-400 text-sm font-medium tracking-wider uppercase mt-2 ml-[60px]">
                             Global Border Security & Risk Assessment
                         </p>
                     </div>
