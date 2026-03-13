@@ -187,7 +187,7 @@ export default function Home() {
 
     // RISK CALCULATION MODEL
     function calculateRisk(travelerName: string, passportNum: string, countryName: string) {
-        const nameLower = (travelerName || "").toLowerCase()
+        const nameLower = (travelerName || "").toLowerCase().trim()
         const key = (countryName || "").toLowerCase().replace(/\s/g, '')
 
         // 🚨 ZERO TOLERANCE CUSTOM RULES
