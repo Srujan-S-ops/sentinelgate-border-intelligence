@@ -1,0 +1,62 @@
+body {
+  margin: 0;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: linear-gradient(135deg,#0f2027,#203a43,#2c5364);
+  min-height: 100vh;
+}
+
+/* dashboard container */
+.dashboard {
+  padding: 40px;
+  color: white;
+}
+
+/* cards */
+.card {
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+}
+
+/* buttons */
+button {
+  border: none;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+button:hover {
+  transform: scale(1.05);
+}
+
+/* table */
+table {
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(10px);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+th {
+  background: rgba(0,0,0,0.4);
+  padding: 10px;
+}
+
+td {
+  padding: 10px;
+}
+
+/* threat panel */
+.threat {
+  background: rgba(255,0,0,0.2);
+  border-left: 5px solid red;
+}
+
+/* map container */
+.map {
+  background: rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 10px;
+}
