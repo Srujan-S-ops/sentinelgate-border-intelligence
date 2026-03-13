@@ -187,8 +187,15 @@ export default function Home() {
 
     // RISK CALCULATION MODEL
     function calculateRisk(travelerName: string, passportNum: string, countryName: string) {
-        // 1️⃣ Country Risk (Base mapped risk + Extreme Nations penalty)
+        const nameLower = (travelerName || "").toLowerCase()
         const key = (countryName || "").toLowerCase().replace(/\s/g, '')
+
+        // 🚨 ZERO TOLERANCE CUSTOM RULES
+        if (nameLower === "xxx" || key === "yyy") {
+            return 100 // Automatic RED Alert
+        }
+
+        // 1️⃣ Country Risk (Base mapped risk + Extreme Nations penalty)
         let countryRiskScore = countryData[key]?.risk || 20
         const extremeRiskNations = ['iran', 'pakistan', 'northkorea', 'syria', 'afghanistan', 'iraq', 'russia']
         if (extremeRiskNations.includes(key)) {
@@ -210,7 +217,6 @@ export default function Home() {
         }
 
         // 3️⃣ Watchlist Risk
-        const nameLower = (travelerName || "").toLowerCase()
         const isOnWatchlist = WATCHLIST.some(w => w.name === nameLower || w.passport === passportNum)
         const watchlistRiskScore = isOnWatchlist ? 100 : 0
 
