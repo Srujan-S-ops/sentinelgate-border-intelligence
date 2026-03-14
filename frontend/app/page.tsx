@@ -17,13 +17,15 @@ import {
     FiGlobe,
     FiAperture,
     FiX,
-    FiUserX
+    FiUserX,
+    FiLayers
 } from "react-icons/fi"
 import Webcam from "react-webcam"
 import { GiCrossedSwords } from "react-icons/gi"
 import { supabase } from "@/lib/supabase"
 import Script from "next/script"
 import { FiTrash2 } from "react-icons/fi"
+import { SimpleBlockchain, Block } from "@/lib/blockchain"
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 
@@ -62,6 +64,20 @@ export default function Home() {
     const webcamRef = useRef<Webcam>(null)
     const faceapiRef = useRef<any>(null)
     const [dbStatus, setDbStatus] = useState<"connecting" | "connected" | "error">("connecting")
+
+    // BLOCKCHAIN LOGIC
+    const [blockchain] = useState(new SimpleBlockchain())
+    const [blocks, setBlocks] = useState<Block[]>([blockchain.getLatestBlock()])
+
+    function recordToBlockchain(traveler: any, eventType: string = "BORDER_CROSSING") {
+        const newBlock = blockchain.addBlock({
+            event: eventType,
+            name: traveler.name,
+            passport: traveler.passport,
+            riskScore: traveler.risk
+        })
+        setBlocks([...blockchain.chain])
+    }
 
     // SUPABASE INITIAL LOAD
     useEffect(() => {
@@ -290,6 +306,7 @@ export default function Home() {
         }
         setTravelers([...travelers, newTraveler])
         checkThreat(newTraveler)
+        recordToBlockchain(newTraveler, "QUICK_SCAN")
         const { error: travErr } = await supabase.from('travelers').insert([newTraveler])
         if (travErr) {
             console.error("Supabase insert error (travelers):", travErr.message)
@@ -322,6 +339,7 @@ export default function Home() {
             }
             setTravelers([...travelers, newTraveler])
             checkThreat(newTraveler)
+            recordToBlockchain(newTraveler, "OCR_UPLOAD")
             const { error: travErr } = await supabase.from('travelers').insert([newTraveler])
             if (travErr) {
                 console.error("Supabase insert error (travelers):", travErr.message)
@@ -351,6 +369,7 @@ export default function Home() {
         }
         setTravelers([...travelers, newTraveler])
         checkThreat(newTraveler)
+        recordToBlockchain(newTraveler, "MANUAL_ENTRY")
         const { error: travErr } = await supabase.from('travelers').insert([newTraveler])
         if (travErr) {
             console.error("Supabase insert error (travelers):", travErr.message)
@@ -424,6 +443,7 @@ export default function Home() {
 
                     setTravelers(prev => [...prev, newTraveler])
                     checkThreat(newTraveler)
+                    recordToBlockchain(newTraveler, "BIOMETRIC_MATCH")
                     const { error: travErr } = await supabase.from('travelers').insert([newTraveler])
                     if (travErr) {
                         console.error("Supabase insert error (travelers):", travErr.message)
@@ -852,6 +872,34 @@ export default function Home() {
                                     </div>
                                 ))
                             )}
+                        </div>
+                    </div>
+
+                    {/* SECURE BLOCKCHAIN LEDGER */}
+                    <div className="bg-slate-900/50 backdrop-blur-xl border border-indigo-500/20 rounded-2xl p-6 shadow-[0_0_30px_rgba(79,70,229,0.1)] relative overflow-hidden">
+                        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-indigo-500/20">
+                            <FiLayers className="w-6 h-6 text-indigo-400" />
+                            <h2 className="text-xl font-bold text-indigo-100 uppercase tracking-widest">Immutable Blockchain Audit Log</h2>
+                        </div>
+                        <div className="space-y-4 max-h-72 overflow-y-auto pr-2 custom-scrollbar">
+                            {blocks.slice().reverse().map((b) => (
+                                <div key={b.index} className="bg-slate-950/80 border border-indigo-500/30 p-4 rounded-xl relative group hover:border-indigo-400/50 transition-colors">
+                                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 rounded-l-xl opacity-50 group-hover:opacity-100 transition-opacity"></div>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs font-black tracking-wider text-indigo-300">BLOCK #{b.index}</span>
+                                        <span className="text-[10px] text-slate-500 font-mono tracking-widest">{new Date(b.timestamp).toLocaleTimeString()}</span>
+                                    </div>
+                                    
+                                    <div className="text-[10px] text-slate-400 font-mono break-all mb-3 bg-black/60 p-2 rounded border border-slate-800/80">
+                                        <div className="mb-1"><span className="text-slate-600">Hash: </span><span className="text-emerald-400/90">{b.hash}</span></div>
+                                        <div><span className="text-slate-600">Prev Hash: </span><span className="text-slate-400">{b.previousHash}</span></div>
+                                    </div>
+
+                                    <div className="text-xs text-indigo-100/80 bg-indigo-950/30 p-2 rounded">
+                                        <span className="font-bold text-indigo-300">[{b.data.event}]</span> - {b.data.name || "System"} (Risk: {b.data.riskScore || 0}%)
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
 
