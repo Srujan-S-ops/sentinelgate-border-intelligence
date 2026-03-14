@@ -1230,7 +1230,7 @@ export default function Home() {
                         <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-slate-700/50 shadow-inner">
                             <iframe 
                                 className="w-full h-full"
-                                src="https://www.youtube.com/embed/n3o_z2H9M8s?si=uQ8Xo3CgqIap8kH-" 
+                                src="https://www.youtube.com/embed/coenonlcJ4w?si=1" 
                                 title="SentinelGate System Walkthrough" 
                                 frameBorder="0" 
                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
