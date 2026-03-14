@@ -18,7 +18,9 @@ import {
     FiAperture,
     FiX,
     FiUserX,
-    FiLayers
+    FiLayers,
+    FiHelpCircle,
+    FiPlayCircle
 } from "react-icons/fi"
 import Webcam from "react-webcam"
 import { GiCrossedSwords } from "react-icons/gi"
@@ -42,18 +44,37 @@ const WATCHLIST = [
 
 export default function Home() {
     // AUTHENTICATION
-    const [isAuthenticated, setIsAuthenticated] = useState(false)
+    const [authRole, setAuthRole] = useState<"admin" | "user" | null>(null)
     const [loginUsername, setLoginUsername] = useState("")
     const [loginPassword, setLoginPassword] = useState("")
     const [loginError, setLoginError] = useState("")
 
     const handleLogin = (e: React.FormEvent) => {
         e.preventDefault()
+        // Admin Login
         if (loginUsername === "CentralBureauInvestigration033" && loginPassword === "IndiaSecurityTopRisk04822") {
-            setIsAuthenticated(true)
+            setAuthRole("admin")
+            setLoginError("")
+            return
+        }
+        
+        // User Login - Assume Username = Name, Password = Passport Number
+        const normalizedNameInput = loginUsername.trim().toLowerCase()
+        const normalizedPassportInput = loginPassword.trim().toUpperCase()
+
+        const foundUser = travelers.find(t => 
+            t.name.trim().toLowerCase() === normalizedNameInput && 
+            t.passport.trim().toUpperCase() === normalizedPassportInput
+        )
+
+        if (foundUser) {
+            setUserPassportInput(foundUser.passport)
+            setUserPassportStatus(foundUser)
+            setUserPassportQueried(true)
+            setAuthRole("user")
             setLoginError("")
         } else {
-            setLoginError("Invalid clearance credentials")
+            setLoginError("Invalid credentials or traveler record not found")
         }
     }
 
@@ -70,6 +91,22 @@ export default function Home() {
     const [passport, setPassport] = useState("")
     const [country, setCountry] = useState("")
 
+    // user passport check states
+    const [userPassportInput, setUserPassportInput] = useState("")
+    const [userPassportStatus, setUserPassportStatus] = useState<any>(null)
+    const [userPassportQueried, setUserPassportQueried] = useState(false)
+
+    const handleUserCheck = (e: React.FormEvent) => {
+        e.preventDefault()
+        setUserPassportQueried(true)
+        const found = travelers.find(t => t.passport.toUpperCase() === userPassportInput.trim().toUpperCase())
+        if (found) {
+            setUserPassportStatus(found)
+        } else {
+            setUserPassportStatus(null)
+        }
+    }
+
     // face recognition states
     const [showFaceScan, setShowFaceScan] = useState(false)
     const [isScanning, setIsScanning] = useState(false)
@@ -80,6 +117,9 @@ export default function Home() {
     const webcamRef = useRef<Webcam>(null)
     const faceapiRef = useRef<any>(null)
     const [dbStatus, setDbStatus] = useState<"connecting" | "connected" | "error">("connecting")
+
+    // HELP VIDEO STATE
+    const [showHelpVideo, setShowHelpVideo] = useState(false)
 
     // BLOCKCHAIN LOGIC
     const [blockchain] = useState(new SimpleBlockchain())
@@ -523,7 +563,7 @@ export default function Home() {
         }]
     }
 
-    if (!isAuthenticated) {
+    if (!authRole) {
         return (
             <div className="min-h-screen text-slate-200 flex items-center justify-center p-4 bg-slate-950 font-sans">
                 <div className="bg-slate-900 border border-slate-700/50 rounded-3xl p-8 shadow-2xl max-w-md w-full relative overflow-hidden">
@@ -536,6 +576,9 @@ export default function Home() {
                         <div>
                             <h1 className="text-2xl tracking-tight font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 pt-1">SentinelGate Intelligence</h1>
                             <p className="text-slate-400 text-sm tracking-widest uppercase mt-1">Authorized Personnel Only</p>
+                            <p className="text-slate-500 text-xs mt-3 font-medium border border-slate-700/50 bg-slate-950/50 p-2 rounded-lg">
+                                <strong>Travelers:</strong> Login with Name and Passport Number.
+                            </p>
                         </div>
                     </div>
                     
@@ -546,7 +589,7 @@ export default function Home() {
                             </div>
                         )}
                         <div>
-                            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Clearance ID</label>
+                            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Clearance ID / Name</label>
                             <input
                                 type="text"
                                 value={loginUsername}
@@ -574,6 +617,79 @@ export default function Home() {
                         </button>
                     </form>
                 </div>
+            </div>
+        )
+    }
+
+    if (authRole === "user") {
+        return (
+            <div className="min-h-screen text-slate-200 flex flex-col items-center justify-center p-4 bg-slate-950 font-sans relative">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+                
+                <div className="mb-8 text-center bg-white/5 backdrop-blur-xl border border-white/10 p-6 rounded-2xl shadow-2xl z-10 w-full max-w-md">
+                    <div className="flex items-center justify-center gap-3 mb-2">
+                        <FiShield className="w-8 h-8 text-emerald-400" />
+                        <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-blue-400">Passenger Portal</h1>
+                    </div>
+                    <p className="text-slate-400 text-sm">Welcome back, {userPassportStatus?.name || 'Traveler'}</p>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-700/50 rounded-3xl p-8 shadow-2xl max-w-md w-full relative z-10">
+                    <div className="mb-6 flex items-center justify-between">
+                        <h2 className="text-xl font-bold text-white">Your Clearance Status</h2>
+                        <FiSearch className="w-5 h-5 text-emerald-500 opacity-50" />
+                    </div>
+
+                    {userPassportStatus ? (
+                        <div className={`p-5 rounded-2xl border ${userPassportStatus.risk >= 70 ? 'bg-rose-950/30 border-rose-500/30' : userPassportStatus.risk >= 40 ? 'bg-amber-950/30 border-amber-500/30' : 'bg-emerald-950/30 border-emerald-500/30'}`}>
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest">Assessment Result</h3>
+                                <span className={`px-4 py-1.5 rounded-full text-sm font-black tracking-wide ${getColorClass(userPassportStatus.risk)}`}>
+                                    {getStatus(userPassportStatus.risk)}
+                                </span>
+                            </div>
+                            <div className="space-y-3 text-sm">
+                                <div className="flex justify-between items-center bg-black/30 p-3 rounded-lg border border-white/5">
+                                    <span className="text-slate-400 font-medium">Full Name</span>
+                                    <span className="text-white font-bold">{userPassportStatus.name}</span>
+                                </div>
+                                <div className="flex justify-between items-center bg-black/30 p-3 rounded-lg border border-white/5">
+                                    <span className="text-slate-400 font-medium">Passport ID</span>
+                                    <span className="text-white font-mono">{userPassportStatus.passport}</span>
+                                </div>
+                                <div className="flex justify-between items-center bg-black/30 p-3 rounded-lg border border-white/5">
+                                    <span className="text-slate-400 font-medium">Origin Country</span>
+                                    <span className="text-white uppercase font-bold">{userPassportStatus.country}</span>
+                                </div>
+                                <div className="flex justify-between items-center bg-black/30 p-3 rounded-lg border border-white/5">
+                                    <span className="text-slate-400 font-medium">Risk Score</span>
+                                    <span className="text-white font-mono">{userPassportStatus.risk}%</span>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center p-6 bg-slate-950/50 border border-slate-700 rounded-2xl">
+                            <FiAlertOctagon className="w-8 h-8 text-rose-500 mx-auto mb-3 opacity-80 animate-pulse" />
+                            <p className="text-slate-300 font-medium">Status unavailable.</p>
+                            <p className="text-slate-500 text-xs mt-1">Please contact border security.</p>
+                        </div>
+                    )}
+                </div>
+                
+                <button 
+                    onClick={() => {
+                        setAuthRole(null)
+                        setLoginUsername("")
+                        setLoginPassword("")
+                        setUserPassportInput("")
+                        setUserPassportQueried(false)
+                        setUserPassportStatus(null)
+                    }}
+                    className="mt-8 bg-white/5 border border-white/10 hover:bg-white/10 px-4 py-2 rounded-xl text-slate-400 hover:text-white transition-colors z-10 font-medium text-sm flex items-center gap-2"
+                    title="Sign Out"
+                >
+                    <FiUserX className="w-4 h-4" /> Secure Logout
+                </button>
             </div>
         )
     }
@@ -651,6 +767,14 @@ export default function Home() {
                         className="flex items-center justify-center p-2.5 bg-slate-800 hover:bg-rose-900/40 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-600 hover:border-rose-500/50 transition-all"
                     >
                         <FiTrash2 className="w-5 h-5" />
+                    </button>
+
+                    <button
+                        onClick={() => setAuthRole(null)}
+                        title="Sign Out"
+                        className="flex items-center justify-center p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 rounded-xl border border-slate-600 hover:border-slate-500 transition-all ml-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 hover:border-rose-500/50"
+                    >
+                        <FiUserX className="w-5 h-5" />
                     </button>
                 </div>
             </header>
@@ -1069,6 +1193,50 @@ export default function Home() {
                                     </button>
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* FLOATING HELP BUTTON */}
+            <button
+                onClick={() => setShowHelpVideo(true)}
+                className="fixed bottom-6 right-6 p-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-[0_0_20px_rgba(79,70,229,0.5)] transition-all z-40 group flex items-center justify-center gap-0 hover:gap-2 overflow-hidden hover:px-6 hover:rounded-xl"
+                title="System Help"
+            >
+                <FiHelpCircle className="w-6 h-6 shrink-0" />
+                <span className="max-w-0 overflow-hidden font-bold tracking-wider group-hover:max-w-[100px] transition-all duration-300 ease-in-out whitespace-nowrap">
+                    HELP
+                </span>
+            </button>
+
+            {/* VIDEO HELP OVERLAY */}
+            {showHelpVideo && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in-up">
+                    <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-4 sm:p-6 shadow-2xl max-w-4xl w-full relative overflow-hidden">
+                        
+                        <button
+                            onClick={() => setShowHelpVideo(false)}
+                            className="absolute top-4 right-4 p-2 bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 text-slate-300 rounded-full transition-colors z-20 border border-transparent hover:border-rose-500/30"
+                        >
+                            <FiX className="w-5 h-5" />
+                        </button>
+
+                        <div className="flex items-center gap-3 mb-4">
+                            <FiPlayCircle className="w-6 h-6 text-indigo-400" />
+                            <h2 className="text-xl font-bold text-white tracking-tight">System Walkthrough</h2>
+                        </div>
+
+                        <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-slate-700/50 shadow-inner">
+                            <iframe 
+                                className="w-full h-full"
+                                src="https://www.youtube.com/embed/n3o_z2H9M8s?si=uQ8Xo3CgqIap8kH-" 
+                                title="SentinelGate System Walkthrough" 
+                                frameBorder="0" 
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                                referrerPolicy="strict-origin-when-cross-origin" 
+                                allowFullScreen
+                            ></iframe>
                         </div>
                     </div>
                 </div>
