@@ -1227,16 +1227,20 @@ export default function Home() {
                             <h2 className="text-xl font-bold text-white tracking-tight">System Walkthrough</h2>
                         </div>
 
-                        <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-slate-700/50 shadow-inner">
-                            <iframe 
-                                className="w-full h-full"
-                                src="https://www.youtube.com/embed/coenonlcJ4w?si=1" 
-                                title="SentinelGate System Walkthrough" 
-                                frameBorder="0" 
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
-                                referrerPolicy="strict-origin-when-cross-origin" 
-                                allowFullScreen
-                            ></iframe>
+                        <div className="relative w-full p-8 bg-black/50 rounded-xl border border-slate-700/50 shadow-inner flex flex-col items-center justify-center text-center">
+                            <FiPlayCircle className="w-16 h-16 text-indigo-500 mb-4 opacity-80" />
+                            <h3 className="text-xl font-bold text-slate-200 mb-2">Watch the full video tutorial</h3>
+                            <p className="text-slate-400 mb-6 max-w-md">Learn how to effectively use the SentinelGate Intelligence dashboard to track and manage border security.</p>
+                            
+                            <a 
+                                href="https://www.youtube.com/watch?v=coenonlcJ4w" 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-[0_0_20px_rgba(79,70,229,0.4)] hover:shadow-[0_0_25px_rgba(79,70,229,0.6)]"
+                            >
+                                <FiPlayCircle className="w-5 h-5" />
+                                Watch on YouTube
+                            </a>
                         </div>
                     </div>
                 </div>
