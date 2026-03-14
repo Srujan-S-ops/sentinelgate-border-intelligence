@@ -41,6 +41,22 @@ const WATCHLIST = [
 ]
 
 export default function Home() {
+    // AUTHENTICATION
+    const [isAuthenticated, setIsAuthenticated] = useState(false)
+    const [loginUsername, setLoginUsername] = useState("")
+    const [loginPassword, setLoginPassword] = useState("")
+    const [loginError, setLoginError] = useState("")
+
+    const handleLogin = (e: React.FormEvent) => {
+        e.preventDefault()
+        if (loginUsername === "CentralBureauInvestigration033" && loginPassword === "IndiaSecurityTopRisk04822") {
+            setIsAuthenticated(true)
+            setLoginError("")
+        } else {
+            setLoginError("Invalid clearance credentials")
+        }
+    }
+
     // travelers
     const [travelers, setTravelers] = useState([
         { name: "Initial Traveler", passport: "X1234567", country: "India", risk: 20, lat: 21, lng: 78 }
@@ -505,6 +521,61 @@ export default function Home() {
             borderWidth: 0,
             hoverOffset: 4
         }]
+    }
+
+    if (!isAuthenticated) {
+        return (
+            <div className="min-h-screen text-slate-200 flex items-center justify-center p-4 bg-slate-950 font-sans">
+                <div className="bg-slate-900 border border-slate-700/50 rounded-3xl p-8 shadow-2xl max-w-md w-full relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+                    <div className="relative z-10 flex flex-col items-center gap-4 mb-8 text-center">
+                        <div className="flex items-center justify-center p-3 bg-gradient-to-br from-indigo-500 via-blue-500 to-emerald-500 rounded-2xl shadow-[0_0_20px_rgba(56,189,248,0.4)] border border-white/20 relative">
+                            <GiCrossedSwords className="w-10 h-10 text-slate-900/40 absolute mt-1" />
+                            <FiShield className="w-8 h-8 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] relative z-10" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl tracking-tight font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 pt-1">SentinelGate Intelligence</h1>
+                            <p className="text-slate-400 text-sm tracking-widest uppercase mt-1">Authorized Personnel Only</p>
+                        </div>
+                    </div>
+                    
+                    <form onSubmit={handleLogin} className="relative z-10 space-y-5">
+                        {loginError && (
+                            <div className="bg-rose-500/10 border border-rose-500/50 text-rose-400 p-3 rounded-lg text-sm text-center font-medium">
+                                {loginError}
+                            </div>
+                        )}
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Clearance ID</label>
+                            <input
+                                type="text"
+                                value={loginUsername}
+                                onChange={(e) => setLoginUsername(e.target.value)}
+                                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono"
+                                placeholder="Enter Access Code"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Secure Passkey</label>
+                            <input
+                                type="password"
+                                value={loginPassword}
+                                onChange={(e) => setLoginPassword(e.target.value)}
+                                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono"
+                                placeholder="••••••••••••"
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            className="w-full mt-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-[0_0_15px_rgba(79,70,229,0.3)] hover:shadow-[0_0_20px_rgba(79,70,229,0.5)] flex items-center justify-center gap-2 uppercase tracking-wider text-sm"
+                        >
+                            <FiSearch className="w-4 h-4" />
+                            Authenticate
+                        </button>
+                    </form>
+                </div>
+            </div>
+        )
     }
 
     return (
