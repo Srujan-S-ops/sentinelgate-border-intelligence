@@ -113,3 +113,40 @@ body {
 .animate-siren {
   animation: siren-glow 1.5s ease-in-out infinite;
 }
+
+/* Radar Sweep Animation */
+@keyframes radar-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-radar-spin {
+  animation: radar-spin 4s linear infinite;
+  transform-origin: center;
+}
+
+/* Military Grade Ping (Intense Flash) */
+@keyframes military-ping {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+    filter: drop-shadow(0 0 5px rgba(244, 63, 94, 0.8));
+  }
+  50% {
+    transform: scale(2.5);
+    opacity: 0.1;
+    filter: drop-shadow(0 0 20px rgba(244, 63, 94, 1));
+  }
+  100% {
+    transform: scale(3.5);
+    opacity: 0;
+  }
+}
+
+.animate-military-ping {
+  animation: military-ping 1.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}

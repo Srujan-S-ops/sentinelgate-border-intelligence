@@ -23,6 +23,7 @@ import Webcam from "react-webcam"
 import { GiCrossedSwords } from "react-icons/gi"
 import { supabase } from "@/lib/supabase"
 import Script from "next/script"
+import { FiTrash2 } from "react-icons/fi"
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 
@@ -267,7 +268,11 @@ export default function Home() {
             setThreats(prev => [newLocalThreat, ...prev.slice(0, 4)])
 
             // remote push
-            await supabase.from('threats').insert([threat])
+            const { error: threatErr } = await supabase.from('threats').insert([threat])
+            if (threatErr) {
+                console.error("Supabase insert error (threats):", threatErr.message)
+                alert("Database Error: Failed to save threat to Supabase. Check RLS policies.")
+            }
         }
     }
 
@@ -285,7 +290,11 @@ export default function Home() {
         }
         setTravelers([...travelers, newTraveler])
         checkThreat(newTraveler)
-        await supabase.from('travelers').insert([newTraveler])
+        const { error: travErr } = await supabase.from('travelers').insert([newTraveler])
+        if (travErr) {
+            console.error("Supabase insert error (travelers):", travErr.message)
+            alert("Database Error: Failed to save traveler. RLS policy violation? " + travErr.message)
+        }
     }
 
     // OCR UPLOAD
@@ -313,6 +322,11 @@ export default function Home() {
             }
             setTravelers([...travelers, newTraveler])
             checkThreat(newTraveler)
+            const { error: travErr } = await supabase.from('travelers').insert([newTraveler])
+            if (travErr) {
+                console.error("Supabase insert error (travelers):", travErr.message)
+                alert("Database Error: Failed to save OCR traveler: " + travErr.message)
+            }
         } catch (err) {
             console.error("OCR scan failed or server offline.", err)
             alert("OCR Scan failed. Make sure Flask backend is running on 127.0.0.1:5000.")
@@ -337,7 +351,11 @@ export default function Home() {
         }
         setTravelers([...travelers, newTraveler])
         checkThreat(newTraveler)
-        await supabase.from('travelers').insert([newTraveler])
+        const { error: travErr } = await supabase.from('travelers').insert([newTraveler])
+        if (travErr) {
+            console.error("Supabase insert error (travelers):", travErr.message)
+            alert("Database Error: Failed to save traveler. RLS policy violation? " + travErr.message)
+        }
 
         setName("")
         setPassport("")
@@ -406,7 +424,11 @@ export default function Home() {
 
                     setTravelers(prev => [...prev, newTraveler])
                     checkThreat(newTraveler)
-                    await supabase.from('travelers').insert([newTraveler])
+                    const { error: travErr } = await supabase.from('travelers').insert([newTraveler])
+                    if (travErr) {
+                        console.error("Supabase insert error (travelers):", travErr.message)
+                        alert("Database Error: Failed to save face match traveler: " + travErr.message)
+                    }
                 } else {
                     setScanResult({
                         match: false,
@@ -427,6 +449,28 @@ export default function Home() {
             }
         }
     }, [travelers, modelsLoaded, trumpDescriptor])
+
+    // CLEAR DATABASE
+    async function clearDatabase() {
+        if (!confirm("Are you sure you want to delete all traveler and threat data? This cannot be undone.")) return
+
+        try {
+            // Delete all records where ID is not null (deletes all)
+            const { error: travErr } = await supabase.from('travelers').delete().not('id', 'is', null)
+            if (travErr) throw travErr
+
+            const { error: thrErr } = await supabase.from('threats').delete().not('id', 'is', null)
+            if (thrErr) throw thrErr
+
+            // Reset local state
+            setTravelers([])
+            setThreats([])
+            alert("Database cleared successfully!")
+        } catch (err: any) {
+            console.error("Failed to clear database:", err)
+            alert("Error clearing database. Make sure your RLS policies allow DELETE operations. " + err.message)
+        }
+    }
 
     // STATS
     const alertsCount = travelers.filter(t => t.risk >= 70).length
@@ -475,7 +519,7 @@ export default function Home() {
                     </div>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-center gap-4 mt-6 xl:mt-0 xl:justify-end">
+                <div className="flex flex-wrap items-center justify-center lg:justify-end gap-2 lg:gap-4 mt-6 xl:mt-0 w-full xl:w-auto overflow-visible">
 
                     <button
                         onClick={() => setShowFaceScan(true)}
@@ -506,6 +550,16 @@ export default function Home() {
                     >
                         <FiSearch className="w-5 h-5" />
                         <span>Quick Scan</span>
+                    </button>
+
+                    <div className="w-px h-8 bg-slate-700 hidden sm:block mx-1"></div>
+                    
+                    <button
+                        onClick={clearDatabase}
+                        title="Clear all travelers and threats"
+                        className="flex items-center justify-center p-2.5 bg-slate-800 hover:bg-rose-900/40 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-600 hover:border-rose-500/50 transition-all"
+                    >
+                        <FiTrash2 className="w-5 h-5" />
                     </button>
                 </div>
             </header>
@@ -542,8 +596,23 @@ export default function Home() {
                             <FiGlobe className="w-6 h-6 text-emerald-400" />
                             <h2 className="text-xl font-bold text-white">Live Global Tracking</h2>
                         </div>
-                        <div className="w-full h-[450px] bg-slate-900/50 rounded-xl border border-white/5 overflow-hidden flex items-center justify-center pt-8">
-                            <ComposableMap projectionConfig={{ scale: 320, center: [15, 10] }} style={{ width: "100%", height: "100%" }}>
+                        <div className="w-full h-[450px] bg-slate-950 rounded-xl border border-white/5 overflow-hidden flex items-center justify-center pt-8 relative">
+
+                            {/* RADAR SWEEP ANIMATION OVERLAY */}
+                            <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden opacity-50">
+                                <div className="absolute w-[800px] h-[800px] rounded-full animate-radar-spin" 
+                                     style={{ background: 'conic-gradient(from 0deg, transparent 70%, rgba(16, 185, 129, 0.1) 90%, rgba(16, 185, 129, 0.4) 100%)' }}>
+                                </div>
+                                {/* Crosshairs */}
+                                <div className="absolute w-full h-[1px] bg-emerald-500/10"></div>
+                                <div className="absolute h-full w-[1px] bg-emerald-500/10"></div>
+                                {/* Concentric rings */}
+                                <div className="absolute w-[200px] h-[200px] rounded-full border border-emerald-500/10"></div>
+                                <div className="absolute w-[400px] h-[400px] rounded-full border border-emerald-500/10"></div>
+                                <div className="absolute w-[600px] h-[600px] rounded-full border border-emerald-500/10"></div>
+                            </div>
+
+                            <ComposableMap projectionConfig={{ scale: 320, center: [15, 10] }} style={{ width: "100%", height: "100%" }} className="relative z-10">
                                 <Geographies geography="https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json">
                                     {({ geographies }) => geographies.map(geo => (
                                         <Geography
@@ -589,7 +658,11 @@ export default function Home() {
                                 {/* ORIGIN MARKERS */}
                                 {travelers.map((t, i) => (
                                     <Marker key={i} coordinates={[t.lng, t.lat]}>
-                                        <circle r={t.risk >= 70 ? 8 : 4} fill={getHexColor(t.risk)} className={t.risk >= 70 ? "animate-ping opacity-75 object-center" : ""} />
+                                        <circle 
+                                            r={t.risk >= 70 ? 12 : 4} 
+                                            fill={getHexColor(t.risk)} 
+                                            className={t.risk >= 70 ? "animate-military-ping transform-origin-center" : ""} 
+                                        />
                                         <circle r={t.risk >= 70 ? 5 : 4} fill={getHexColor(t.risk)} />
                                     </Marker>
                                 ))}
