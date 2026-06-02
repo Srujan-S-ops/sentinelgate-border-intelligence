@@ -1403,9 +1403,41 @@ export default function Home() {
                             <div className="absolute top-0 left-0 w-2 h-full bg-blue-500"></div>
                             <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
                                 <h3 className="text-md font-bold text-white uppercase tracking-wider">Flight Operations Status</h3>
-                                <span className="text-[9px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded font-mono font-bold tracking-wider">
-                                    ON TIME
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    {currentUserProfile?.flightNo && (
+                                        <button
+                                            onClick={async () => {
+                                                if (confirm("Are you ready to link a new journey? This will reset your current flight number and require a new biometric scan at check-in.")) {
+                                                    try {
+                                                        if (auth.currentUser) {
+                                                            await updateUserProfile(auth.currentUser.uid, {
+                                                                flightNo: "",
+                                                                verified: false
+                                                            });
+                                                            setCurrentUserProfile((prev: any) => ({
+                                                                ...prev,
+                                                                flightNo: "",
+                                                                verified: false
+                                                            }));
+                                                            setUserPassportStatus(prev => prev ? { ...prev, verified: false } : null);
+                                                            setVerificationPassData(null);
+                                                            setVerifStep("form");
+                                                            alert("Flight details reset successfully. You can now link a new flight PNR / details.");
+                                                        }
+                                                    } catch (err: any) {
+                                                        console.error("Error resetting journey:", err);
+                                                    }
+                                                }
+                                            }}
+                                            className="text-[10px] text-amber-400 hover:text-amber-300 font-bold border border-amber-500/30 px-2.5 py-1 rounded bg-amber-500/5 hover:bg-amber-500/10 transition-all uppercase tracking-wide mr-2"
+                                        >
+                                            Link New Journey
+                                        </button>
+                                    )}
+                                    <span className="text-[9px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded font-mono font-bold tracking-wider">
+                                        ON TIME
+                                    </span>
+                                </div>
                             </div>
 
                             {currentUserProfile?.flightNo ? (
