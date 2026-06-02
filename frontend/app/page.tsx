@@ -93,6 +93,12 @@ export default function Home() {
     const [signupPassport, setSignupPassport] = useState("")
     const [signupFlight, setSignupFlight] = useState("")
 
+    // Travel details declaration states (asked after logging in if missing)
+    const [declPassport, setDeclPassport] = useState("")
+    const [declDob, setDeclDob] = useState("")
+    const [declFlight, setDeclFlight] = useState("")
+    const [declCountry, setDeclCountry] = useState("India")
+
     // Admin detail inspector modal states
     const [selectedTravelerDetail, setSelectedTravelerDetail] = useState<any>(null)
     const [showDetailModal, setShowDetailModal] = useState(false)
@@ -176,7 +182,7 @@ export default function Home() {
         e.preventDefault()
         setLoginError("")
 
-        if (!signupEmail || !signupPassword || !signupName || !signupPassport) {
+        if (!signupEmail || !signupPassword || !signupName || !signupPhone) {
             setLoginError("Please fill out all required fields.")
             return
         }
@@ -188,10 +194,10 @@ export default function Home() {
             const profile = {
                 name: signupName.trim().toUpperCase(),
                 email: signupEmail.trim().toLowerCase(),
-                phone: signupPhone.trim() || "+1 (555) 000-0000",
-                dob: signupDob || "2000-01-01",
-                passport: signupPassport.trim().toUpperCase(),
-                flightNo: signupFlight.trim().toUpperCase() || "SG-101",
+                phone: signupPhone.trim(),
+                dob: "",
+                passport: "",
+                flightNo: "",
                 verified: false,
                 risk: 20
             }
@@ -199,54 +205,15 @@ export default function Home() {
             await createUserProfile(uid, profile)
             setCurrentUserProfile(profile)
             setUserPassportStatus(profile)
-            setUserPassportInput(profile.passport)
+            setUserPassportInput("")
             setUserPassportQueried(true)
             setAuthRole("user")
-            setVerifStep("form") // Go to self-verification wizard step
+            setVerifStep("form")
             setLoginError("")
             alert("Account registered successfully!")
         } catch (err: any) {
             console.error("Signup error:", err)
             setLoginError(err.message || "Failed to create account.")
-        }
-    }
-
-    const handleGoogleLogin = async () => {
-        setLoginError("")
-        const provider = new GoogleAuthProvider()
-        try {
-            const result = await signInWithPopup(auth, provider)
-            const user = result.user
-            const profile = await getUserProfile(user.uid)
-            if (profile) {
-                setCurrentUserProfile(profile)
-                setUserPassportStatus(profile)
-                setUserPassportInput(profile.passport)
-                setUserPassportQueried(true)
-                setAuthRole("user")
-                setLoginError("")
-            } else {
-                const defaultProfile = {
-                    name: user.displayName?.toUpperCase() || "GOOGLE USER",
-                    email: user.email?.toLowerCase() || "",
-                    phone: "+1 (555) 000-0000",
-                    dob: "2000-01-01",
-                    passport: "PENDING",
-                    flightNo: "SG-101",
-                    verified: false,
-                    risk: 20
-                }
-                await createUserProfile(user.uid, defaultProfile)
-                setCurrentUserProfile(defaultProfile)
-                setUserPassportStatus(defaultProfile)
-                setUserPassportInput("PENDING")
-                setUserPassportQueried(true)
-                setAuthRole("user")
-                setLoginError("")
-            }
-        } catch (err: any) {
-            console.error("Google login error:", err)
-            setLoginError("Failed to sign in with Google: " + err.message)
         }
     }
 
@@ -838,7 +805,7 @@ export default function Home() {
         
         let finalName = name || "Amanda Ross"
         let finalPassport = passport || "P8204921"
-        let finalCountry = country || "Canada"
+        let finalCountry = country || currentUserProfile?.country || "Canada"
 
         if (extractedData) {
             finalName = extractedData.name
@@ -1045,38 +1012,6 @@ export default function Home() {
                                         Log In to Portal
                                     </button>
 
-                                    <div className="relative flex py-2 items-center">
-                                        <div className="flex-grow border-t border-slate-800"></div>
-                                        <span className="flex-shrink mx-4 text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Or OAuth Access</span>
-                                        <div className="flex-grow border-t border-slate-800"></div>
-                                    </div>
-
-                                    <button
-                                        type="button"
-                                        onClick={handleGoogleLogin}
-                                        className="w-full bg-slate-950/80 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-200 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 uppercase tracking-wider"
-                                    >
-                                        <svg className="w-4 h-4" viewBox="0 0 24 24">
-                                            <path
-                                                fill="currentColor"
-                                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                                            />
-                                            <path
-                                                fill="currentColor"
-                                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                                            />
-                                            <path
-                                                fill="currentColor"
-                                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                                            />
-                                            <path
-                                                fill="currentColor"
-                                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                                            />
-                                        </svg>
-                                        Sign In with Google
-                                    </button>
-
                                     <div className="text-center mt-4">
                                         <button
                                             type="button"
@@ -1114,53 +1049,16 @@ export default function Home() {
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Date of Birth</label>
-                                            <input
-                                                type="date"
-                                                value={signupDob}
-                                                onChange={(e) => setSignupDob(e.target.value)}
-                                                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-700 focus:outline-none focus:border-amber-500"
-                                                required
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Passport Number</label>
-                                            <input
-                                                type="text"
-                                                value={signupPassport}
-                                                onChange={(e) => setSignupPassport(e.target.value)}
-                                                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-white uppercase font-mono placeholder-slate-700 focus:outline-none focus:border-amber-500"
-                                                placeholder="L1234567"
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Flight Number</label>
-                                            <input
-                                                type="text"
-                                                value={signupFlight}
-                                                onChange={(e) => setSignupFlight(e.target.value)}
-                                                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-white uppercase font-mono placeholder-slate-700 focus:outline-none focus:border-amber-500"
-                                                placeholder="SG-302"
-                                                required
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Email Address</label>
-                                            <input
-                                                type="email"
-                                                value={signupEmail}
-                                                onChange={(e) => setSignupEmail(e.target.value)}
-                                                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-700 focus:outline-none focus:border-amber-500"
-                                                placeholder="name@email.com"
-                                                required
-                                            />
-                                        </div>
+                                    <div>
+                                        <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Email Address</label>
+                                        <input
+                                            type="email"
+                                            value={signupEmail}
+                                            onChange={(e) => setSignupEmail(e.target.value)}
+                                            className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-700 focus:outline-none focus:border-amber-500"
+                                            placeholder="name@email.com"
+                                            required
+                                        />
                                     </div>
 
                                     <div>
@@ -1205,6 +1103,157 @@ export default function Home() {
         const isVerified = currentUserProfile?.verified || userPassportStatus?.verified || verificationPassData?.verified;
         const currentRisk = currentUserProfile?.risk ?? 20;
         const finalStatus = getStatus(currentRisk);
+
+        const needsDeclaration = !currentUserProfile?.passport || !currentUserProfile?.dob || !currentUserProfile?.flightNo;
+
+        if (needsDeclaration) {
+            return (
+                <div className="min-h-screen text-slate-200 flex items-center justify-center p-4 bg-slate-950 font-sans relative overflow-x-hidden">
+                    {/* Background animations */}
+                    <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] pointer-events-none"></div>
+                    <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 pointer-events-none"></div>
+                    <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl translate-y-1/2 pointer-events-none"></div>
+
+                    <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700/50 rounded-3xl p-6 sm:p-8 shadow-2xl max-w-xl w-full relative overflow-hidden z-10">
+                        {/* Glowing status bar */}
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-500"></div>
+
+                        {/* Crest Header */}
+                        <div className="relative z-10 flex flex-col items-center gap-2 mb-6 text-center">
+                            <div className="flex items-center justify-center p-3 bg-slate-950 border border-slate-800 rounded-full relative shadow-inner">
+                                <svg className="w-12 h-12 text-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.3)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h1 className="text-xl tracking-tight font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-slate-200 to-amber-400 pt-1">
+                                    TRAVEL DETAIL DECLARATION
+                                </h1>
+                                <p className="text-[10px] text-slate-500 tracking-[0.2em] font-black uppercase mt-1">
+                                    SentinelGate Border Compliance Authority
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Official Notice */}
+                        <div className="bg-amber-950/20 border border-amber-500/20 rounded-xl p-3 mb-6 text-[10px] text-amber-200/80 leading-normal flex items-start gap-3">
+                            <FiLock className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />
+                            <div>
+                                <span className="font-bold block mb-0.5 text-amber-400 uppercase tracking-wider">MANDATORY DECLARATION PROMPT</span>
+                                Please provide your passport details, date of birth, and flight number to verify your identity. This is required to access your digital border clearance token and check verification status.
+                            </div>
+                        </div>
+
+                        <form
+                            onSubmit={async (e) => {
+                                e.preventDefault();
+                                if (!declPassport || !declDob || !declFlight || !declCountry) {
+                                    alert("Please fill in all details.");
+                                    return;
+                                }
+                                const risk = calculateRisk(currentUserProfile?.name || "", declPassport, declCountry);
+                                const updatedData = {
+                                    passport: declPassport.trim().toUpperCase(),
+                                    dob: declDob,
+                                    flightNo: declFlight.trim().toUpperCase(),
+                                    country: declCountry,
+                                    risk: risk,
+                                    verified: false
+                                };
+                                try {
+                                    if (auth.currentUser) {
+                                        await updateUserProfile(auth.currentUser.uid, updatedData);
+                                        setCurrentUserProfile((prev: any) => ({
+                                            ...prev,
+                                            ...updatedData
+                                        }));
+                                        // Update states so scanning works correctly
+                                        setUserPassportInput(declPassport.trim().toUpperCase());
+                                        setPassport(declPassport.trim().toUpperCase());
+                                        setCountry(declCountry);
+                                    }
+                                } catch (err: any) {
+                                    console.error("Error saving declaration:", err);
+                                    alert("Failed to save credentials: " + err.message);
+                                }
+                            }}
+                            className="space-y-4"
+                        >
+                            <div>
+                                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Passport Number</label>
+                                <input
+                                    type="text"
+                                    value={declPassport}
+                                    onChange={(e) => setDeclPassport(e.target.value)}
+                                    className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all font-mono text-sm uppercase"
+                                    placeholder="e.g. A1234567"
+                                    required
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Date of Birth</label>
+                                    <input
+                                        type="date"
+                                        value={declDob}
+                                        onChange={(e) => setDeclDob(e.target.value)}
+                                        className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all text-sm font-mono"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Flight Number</label>
+                                    <input
+                                        type="text"
+                                        value={declFlight}
+                                        onChange={(e) => setDeclFlight(e.target.value)}
+                                        className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all font-mono text-sm uppercase"
+                                        placeholder="e.g. SG-101"
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Country of Citizenship</label>
+                                <select
+                                    value={declCountry}
+                                    onChange={(e) => setDeclCountry(e.target.value)}
+                                    className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all text-sm font-semibold"
+                                    required
+                                >
+                                    <option value="India">India</option>
+                                    <option value="USA">United States</option>
+                                    <option value="Canada">Canada</option>
+                                    <option value="UK">United Kingdom</option>
+                                    <option value="Germany">Germany</option>
+                                    <option value="France">France</option>
+                                    <option value="Australia">Australia</option>
+                                    <option value="Singapore">Singapore</option>
+                                </select>
+                            </div>
+
+                            <button
+                                type="submit"
+                                className="w-full mt-4 bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-[0_0_15px_rgba(217,119,6,0.3)] hover:shadow-[0_0_20px_rgba(217,119,6,0.5)] flex items-center justify-center gap-2 uppercase tracking-wider text-xs"
+                            >
+                                <FiUserCheck className="w-4 h-4" />
+                                Declare Details & Continue
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={handleLogout}
+                                className="w-full bg-slate-800 hover:bg-slate-700 text-slate-350 py-3 rounded-xl text-xs font-bold transition-all border border-slate-700 flex items-center justify-center gap-2 uppercase tracking-wider"
+                            >
+                                <FiUserX className="w-4 h-4" /> Cancel & Sign Out
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )
+        }
 
         return (
             <div className="min-h-screen text-slate-200 p-4 md:p-8 bg-slate-950 font-sans relative overflow-x-hidden">
@@ -1396,7 +1445,7 @@ export default function Home() {
                                                     setVerifStep("biometric")
                                                     setName(currentUserProfile?.name || "")
                                                     setPassport(currentUserProfile?.passport || "")
-                                                    setCountry("Canada")
+                                                    setCountry(currentUserProfile?.country || "India")
                                                 }}
                                                 className="block mx-auto mt-2 text-xs text-amber-500 hover:text-amber-400 font-bold border border-amber-500/30 px-4 py-2 rounded-xl bg-amber-500/5 hover:bg-amber-500/10"
                                             >
@@ -1540,6 +1589,12 @@ export default function Home() {
                             </div>
 
                             <div className="space-y-3.5 text-xs font-mono">
+                                <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-slate-800">
+                                    <span className="text-slate-500">CLEARANCE STATUS</span>
+                                    <span className={`font-bold uppercase ${isVerified ? "text-emerald-400 animate-pulse" : "text-amber-500"}`}>
+                                        {isVerified ? "VERIFIED" : "NOT VERIFIED"}
+                                    </span>
+                                </div>
                                 <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-slate-800">
                                     <span className="text-slate-500">FULL LEGAL NAME</span>
                                     <span className="text-white font-bold uppercase">{currentUserProfile?.name}</span>
