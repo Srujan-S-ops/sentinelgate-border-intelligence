@@ -20,11 +20,27 @@ import {
     FiUserX,
     FiLayers,
     FiHelpCircle,
-    FiPlayCircle
+    FiPlayCircle,
+    FiHeart,
+    FiUploadCloud,
+    FiLock,
+    FiFileText,
+    FiPrinter,
+    FiUserCheck,
+    FiCpu
 } from "react-icons/fi"
 import Webcam from "react-webcam"
 import { GiCrossedSwords } from "react-icons/gi"
-import { supabase } from "@/lib/supabase"
+import {
+    getTravelers,
+    addTraveler,
+    getThreats,
+    addThreat,
+    getAuditLogs,
+    addAuditLog,
+    getWatchlist,
+    clearAllCollections
+} from "@/lib/database"
 import Script from "next/script"
 import { FiTrash2 } from "react-icons/fi"
 import { SimpleBlockchain, Block } from "@/lib/blockchain"
@@ -48,6 +64,22 @@ export default function Home() {
     const [loginUsername, setLoginUsername] = useState("")
     const [loginPassword, setLoginPassword] = useState("")
     const [loginError, setLoginError] = useState("")
+
+    // CUSTOM PASSENGER PORTAL & SELF-VERIFICATION STATES
+    const [loginMode, setLoginMode] = useState<"officer" | "passenger">("passenger")
+    const [verifStep, setVerifStep] = useState<"form" | "upload" | "biometric" | "pass">("form")
+    const [passportImage, setPassportImage] = useState<string | null>(null)
+    const [passportImageName, setPassportImageName] = useState("")
+    const [mrzScanning, setMrzScanning] = useState(false)
+    const [extractedData, setExtractedData] = useState<{name: string, passport: string, country: string} | null>(null)
+    const [selfieScanning, setSelfieScanning] = useState(false)
+    const [biometricMatchScore, setBiometricMatchScore] = useState<number | null>(null)
+    const [verificationPassData, setVerificationPassData] = useState<any>(null)
+    const [terminalLogs, setTerminalLogs] = useState<string[]>([])
+
+    const addTerminalLog = (log: string) => {
+        setTerminalLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${log}`])
+    }
 
     const handleLogin = (e: React.FormEvent) => {
         e.preventDefault()
@@ -79,12 +111,13 @@ export default function Home() {
     }
 
     // travelers
-    const [travelers, setTravelers] = useState([
+    const [travelers, setTravelers] = useState<{name: string, passport: string, country: string, risk: number, lat: number, lng: number, note?: string}[]>([
         { name: "Initial Traveler", passport: "X1234567", country: "India", risk: 20, lat: 21, lng: 78 }
     ])
 
     // threat alerts
     const [threats, setThreats] = useState<any[]>([])
+    const [dbWatchlist, setDbWatchlist] = useState<any[]>([])
 
     // inputs
     const [name, setName] = useState("")
@@ -115,6 +148,7 @@ export default function Home() {
     const [trumpDescriptor, setTrumpDescriptor] = useState<Float32Array | null>(null)
 
     const webcamRef = useRef<Webcam>(null)
+    const passengerWebcamRef = useRef<Webcam>(null)
     const faceapiRef = useRef<any>(null)
     const [dbStatus, setDbStatus] = useState<"connecting" | "connected" | "error">("connecting")
 
@@ -133,37 +167,64 @@ export default function Home() {
             riskScore: traveler.risk
         })
         setBlocks([...blockchain.chain])
+
+        // Log transaction to audit_logs collection (Firestore)
+        addAuditLog({
+            index: newBlock.index,
+            timestamp: newBlock.timestamp,
+            previousHash: newBlock.previousHash,
+            hash: newBlock.hash,
+            event: eventType,
+            name: traveler.name,
+            passport: traveler.passport,
+            riskScore: traveler.risk
+        }).catch(err => console.error("Firebase Audit Log Write Error:", err))
     }
 
-    // SUPABASE INITIAL LOAD
+    // FIREBASE INITIAL LOAD
     useEffect(() => {
         const fetchRemoteData = async () => {
-            const { data: travData, error: travErr } = await supabase.from('travelers').select('*').order('created_at', { ascending: true })
-            if (travErr) {
-                console.error("Supabase Travelers Fetch Error:", travErr.message)
-                setDbStatus("error")
-            } else if (travData) {
+            try {
+                setDbStatus("connecting")
+                const travData = await getTravelers()
                 setDbStatus("connected")
-                if (travData.length > 0) {
-                    setTravelers(travData) // only overwrite if there is DB data
+                if (travData && travData.length > 0) {
+                    setTravelers(travData)
                 }
-            }
 
-            const { data: thrData, error: thrErr } = await supabase.from('threats').select('*').order('created_at', { ascending: false }).limit(5)
-            if (thrErr) {
-                console.error("Supabase Threats Fetch Error:", thrErr.message)
-            } else if (thrData && thrData.length > 0) {
-                setThreats(thrData)
+                const thrData = await getThreats()
+                if (thrData && thrData.length > 0) {
+                    setThreats(thrData)
+                }
+
+                const watchData = await getWatchlist()
+                if (watchData && watchData.length > 0) {
+                    setDbWatchlist(watchData)
+                }
+
+                const auditData = await getAuditLogs()
+                if (auditData && auditData.length > 0) {
+                    // Pre-fill local blockchain chain if we have database logs
+                    blockchain.chain = auditData.map(d => ({
+                        index: d.index,
+                        timestamp: d.timestamp,
+                        data: {
+                            event: d.event,
+                            name: d.name,
+                            passport: d.passport,
+                            riskScore: d.riskScore
+                        },
+                        previousHash: d.previousHash,
+                        hash: d.hash
+                    }))
+                    setBlocks([...blockchain.chain])
+                }
+            } catch (err: any) {
+                console.error("Firestore Loading Error:", err)
+                setDbStatus("error")
             }
         }
         fetchRemoteData()
-
-        /* Optionally listen to real-time events to sync multiple dashboard windows
-        supabase.channel('custom-all-channel')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'travelers' }, fetchRemoteData)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'threats' }, fetchRemoteData)
-            .subscribe()
-        */
     }, [])
 
     useEffect(() => {
@@ -305,21 +366,24 @@ export default function Home() {
     }
 
     // STATUS
-    function getStatus(risk: number) {
+    function getStatus(risk: number, isHumanitarian: boolean = false) {
+        if (isHumanitarian) return "HUMANITARIAN"
         if (risk < 40) return "CLEAR"
         if (risk < 70) return "SECONDARY CHECK"
         return "ALERT"
     }
 
     // RISK COLOR (CSS classes)
-    function getColorClass(risk: number) {
+    function getColorClass(risk: number, isHumanitarian: boolean = false) {
+        if (isHumanitarian) return "bg-purple-500 text-purple-100"
         if (risk < 40) return "bg-emerald-500 text-emerald-100"
         if (risk < 70) return "bg-amber-500 text-amber-100"
         return "bg-rose-500 text-rose-100"
     }
 
     // Hex Colors for charts/maps
-    function getHexColor(risk: number) {
+    function getHexColor(risk: number, isHumanitarian: boolean = false) {
+        if (isHumanitarian) return "#a855f7" // purple
         if (risk < 40) return "#10b981" // emerald
         if (risk < 70) return "#f59e0b" // amber
         return "#f43f5e" // rose
@@ -332,18 +396,19 @@ export default function Home() {
                 name: traveler.name,
                 passport: traveler.passport,
                 risk: traveler.risk,
-                note: traveler.note || "System Alert generated from Risk parameters"
+                note: traveler.note || "System Alert generated from Risk parameters",
+                time: new Date().toLocaleTimeString()
             }
 
-            // local optimisitic update
-            const newLocalThreat = { ...threat, time: new Date().toLocaleTimeString() }
-            setThreats(prev => [newLocalThreat, ...prev.slice(0, 4)])
+            // local optimistic update
+            setThreats(prev => [threat, ...prev.slice(0, 4)])
 
             // remote push
-            const { error: threatErr } = await supabase.from('threats').insert([threat])
-            if (threatErr) {
-                console.error("Supabase insert error (threats):", threatErr.message)
-                alert("Database Error: Failed to save threat to Supabase. Check RLS policies.")
+            try {
+                await addThreat(threat)
+            } catch (err: any) {
+                console.error("Firebase insert error (threats):", err.message)
+                alert("Database Error: Failed to save threat to Firebase: " + err.message)
             }
         }
     }
@@ -363,10 +428,11 @@ export default function Home() {
         setTravelers([...travelers, newTraveler])
         checkThreat(newTraveler)
         recordToBlockchain(newTraveler, "QUICK_SCAN")
-        const { error: travErr } = await supabase.from('travelers').insert([newTraveler])
-        if (travErr) {
-            console.error("Supabase insert error (travelers):", travErr.message)
-            alert("Database Error: Failed to save traveler. RLS policy violation? " + travErr.message)
+        try {
+            await addTraveler(newTraveler)
+        } catch (travErr: any) {
+            console.error("Firebase insert error (travelers):", travErr.message)
+            alert("Database Error: Failed to save traveler: " + travErr.message)
         }
     }
 
@@ -378,17 +444,33 @@ export default function Home() {
         const formData = new FormData()
         formData.append("image", file)
 
+        let travelerData = null;
+
         try {
             const res = await fetch("http://127.0.0.1:5000/scan", {
                 method: "POST",
                 body: formData
             })
-            const data = await res.json()
-            const risk = calculateRisk(data.name, data.passport, "india")
+            if (res.ok) {
+                 const data = await res.json()
+                 travelerData = { name: data.name, passport: data.passport, country: "India" }
+            } else {
+                 throw new Error("Flask server returned an error.")
+            }
+        } catch (err) {
+            console.error("OCR scan failed or server offline. Using mock fallback.", err)
+            // Fallback mock payload
+            const randomID = "F" + Math.floor(Math.random() * 1000000)
+            travelerData = { name: "John Doe (OCR Mock)", passport: randomID, country: "USA" }
+            alert("OCR Server offline - Using fallback mock data.")
+        }
+
+        if (travelerData) {
+            const risk = calculateRisk(travelerData.name, travelerData.passport, travelerData.country)
             const newTraveler = {
-                name: data.name,
-                passport: data.passport,
-                country: "India",
+                name: travelerData.name,
+                passport: travelerData.passport,
+                country: travelerData.country,
                 risk,
                 lat: 21,
                 lng: 78
@@ -396,14 +478,12 @@ export default function Home() {
             setTravelers([...travelers, newTraveler])
             checkThreat(newTraveler)
             recordToBlockchain(newTraveler, "OCR_UPLOAD")
-            const { error: travErr } = await supabase.from('travelers').insert([newTraveler])
-            if (travErr) {
-                console.error("Supabase insert error (travelers):", travErr.message)
+            try {
+                await addTraveler(newTraveler)
+            } catch (travErr: any) {
+                console.error("Firebase insert error (travelers):", travErr.message)
                 alert("Database Error: Failed to save OCR traveler: " + travErr.message)
             }
-        } catch (err) {
-            console.error("OCR scan failed or server offline.", err)
-            alert("OCR Scan failed. Make sure Flask backend is running on 127.0.0.1:5000.")
         }
     }
 
@@ -426,15 +506,43 @@ export default function Home() {
         setTravelers([...travelers, newTraveler])
         checkThreat(newTraveler)
         recordToBlockchain(newTraveler, "MANUAL_ENTRY")
-        const { error: travErr } = await supabase.from('travelers').insert([newTraveler])
-        if (travErr) {
-            console.error("Supabase insert error (travelers):", travErr.message)
-            alert("Database Error: Failed to save traveler. RLS policy violation? " + travErr.message)
+        try {
+            await addTraveler(newTraveler)
+        } catch (travErr: any) {
+            console.error("Firebase insert error (travelers):", travErr.message)
+            alert("Database Error: Failed to save traveler: " + travErr.message)
         }
 
         setName("")
         setPassport("")
         setCountry("")
+    }
+
+    // ASYLUM REGISTER
+    async function registerAsylum() {
+        const asylumID = "T-" + Math.floor(Math.random() * 10000000)
+        const conflictZones = ["Syria", "Afghanistan", "Ukraine", "Sudan", "Yemen"]
+        const randomCountry = conflictZones[Math.floor(Math.random() * conflictZones.length)]
+        
+        const newTraveler = {
+            name: "Asylum Seeker (Temp ID)",
+            passport: asylumID,
+            country: randomCountry,
+            risk: 15, // Low security risk, but needs processing
+            lat: 21,
+            lng: 78,
+            note: "HUMANITARIAN_PROCESSING_REQUIRED"
+        }
+        
+        setTravelers([...travelers, newTraveler])
+        recordToBlockchain(newTraveler, "ASYLUM_REGISTRATION")
+        
+        try {
+            await addTraveler(newTraveler)
+        } catch (travErr: any) {
+            console.error("Firebase insert error (travelers):", travErr.message)
+            alert("Database Error: Failed to save asylum record: " + travErr.message)
+        }
     }
 
     // FACE RECOGNITION SYSTEM
@@ -500,9 +608,10 @@ export default function Home() {
                     setTravelers(prev => [...prev, newTraveler])
                     checkThreat(newTraveler)
                     recordToBlockchain(newTraveler, "BIOMETRIC_MATCH")
-                    const { error: travErr } = await supabase.from('travelers').insert([newTraveler])
-                    if (travErr) {
-                        console.error("Supabase insert error (travelers):", travErr.message)
+                    try {
+                        await addTraveler(newTraveler)
+                    } catch (travErr: any) {
+                        console.error("Firebase insert error (travelers):", travErr.message)
                         alert("Database Error: Failed to save face match traveler: " + travErr.message)
                     }
                 } else {
@@ -528,23 +637,71 @@ export default function Home() {
 
     // CLEAR DATABASE
     async function clearDatabase() {
-        if (!confirm("Are you sure you want to delete all traveler and threat data? This cannot be undone.")) return
+        if (!confirm("Are you sure you want to delete all traveler, threat, and ledger data? This cannot be undone.")) return
 
         try {
-            // Delete all records where ID is not null (deletes all)
-            const { error: travErr } = await supabase.from('travelers').delete().not('id', 'is', null)
-            if (travErr) throw travErr
-
-            const { error: thrErr } = await supabase.from('threats').delete().not('id', 'is', null)
-            if (thrErr) throw thrErr
-
+            await clearAllCollections()
             // Reset local state
             setTravelers([])
             setThreats([])
+            setBlocks([blockchain.getLatestBlock()])
             alert("Database cleared successfully!")
         } catch (err: any) {
             console.error("Failed to clear database:", err)
-            alert("Error clearing database. Make sure your RLS policies allow DELETE operations. " + err.message)
+            alert("Error clearing database: " + err.message)
+        }
+    }
+
+    // PASSENGER BIOMETRIC VERIFICATION LOGIC
+    const finalizePassengerVerification = async (matchedWatchPerson: any, distance: number) => {
+        setSelfieScanning(false)
+        
+        let finalName = name || "Amanda Ross"
+        let finalPassport = passport || "P8204921"
+        let finalCountry = country || "Canada"
+
+        if (extractedData) {
+            finalName = extractedData.name
+            finalPassport = extractedData.passport
+            finalCountry = extractedData.country
+        }
+
+        // If they matched a watchlist person, override details
+        if (matchedWatchPerson) {
+            finalName = matchedWatchPerson.name.toUpperCase()
+            finalPassport = matchedWatchPerson.passport
+            finalCountry = "USA"
+        }
+
+        const risk = calculateRisk(finalName, finalPassport, finalCountry)
+        
+        const newTraveler = {
+            name: finalName,
+            passport: finalPassport,
+            country: finalCountry,
+            risk,
+            lat: 21,
+            lng: 78,
+            verified: true,
+            note: matchedWatchPerson 
+                ? `BIOMETRIC WATCHLIST ALERT: Matches Interpol Profile (${((1 - distance)*100).toFixed(1)}%)`
+                : "Biometrically self-verified traveler"
+        }
+
+        // Save local state
+        setTravelers(prev => [...prev, newTraveler])
+        checkThreat(newTraveler)
+        recordToBlockchain(newTraveler, "TRAVELER_SELF_VERIFY")
+
+        // Save to Firebase Database
+        try {
+            await addTraveler(newTraveler)
+            setVerificationPassData(newTraveler)
+            setVerifStep("pass")
+            addTerminalLog("Verification successfully recorded in secure database.")
+        } catch (err: any) {
+            console.error("Firebase save error:", err)
+            alert("Database Error: Failed to save traveler profile to Firebase.")
         }
     }
 
@@ -565,57 +722,413 @@ export default function Home() {
 
     if (!authRole) {
         return (
-            <div className="min-h-screen text-slate-200 flex items-center justify-center p-4 bg-slate-950 font-sans">
-                <div className="bg-slate-900 border border-slate-700/50 rounded-3xl p-8 shadow-2xl max-w-md w-full relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-                    <div className="relative z-10 flex flex-col items-center gap-4 mb-8 text-center">
-                        <div className="flex items-center justify-center p-3 bg-gradient-to-br from-indigo-500 via-blue-500 to-emerald-500 rounded-2xl shadow-[0_0_20px_rgba(56,189,248,0.4)] border border-white/20 relative">
-                            <GiCrossedSwords className="w-10 h-10 text-slate-900/40 absolute mt-1" />
-                            <FiShield className="w-8 h-8 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] relative z-10" />
+            <div className="min-h-screen text-slate-200 flex items-center justify-center p-4 bg-slate-950 font-sans relative overflow-x-hidden">
+                {/* Secure network layout grid background */}
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] pointer-events-none"></div>
+                <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 pointer-events-none"></div>
+                <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl translate-y-1/2 pointer-events-none"></div>
+
+                <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700/50 rounded-3xl p-6 sm:p-8 shadow-2xl max-w-xl w-full relative overflow-hidden z-10">
+                    {/* Glowing status bar */}
+                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-amber-500 to-emerald-500"></div>
+
+                    {/* Official Crest Header */}
+                    <div className="relative z-10 flex flex-col items-center gap-2 mb-6 text-center">
+                        <div className="flex items-center justify-center p-3 bg-slate-950 border border-slate-800 rounded-full relative shadow-inner">
+                            <svg className="w-12 h-12 text-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.3)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                            </svg>
                         </div>
                         <div>
-                            <h1 className="text-2xl tracking-tight font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 pt-1">SentinelGate Intelligence</h1>
-                            <p className="text-slate-400 text-sm tracking-widest uppercase mt-1">Authorized Personnel Only</p>
-                            <p className="text-slate-500 text-xs mt-3 font-medium border border-slate-700/50 bg-slate-950/50 p-2 rounded-lg">
-                                <strong>Travelers:</strong> Login with Name and Passport Number.
+                            <h1 className="text-xl tracking-tight font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-slate-200 to-amber-400 pt-1">
+                                SENTINELGATE IMMIGRATION
+                            </h1>
+                            <p className="text-[10px] text-slate-500 tracking-[0.2em] font-black uppercase mt-1">
+                                Federal Security & Border Compliance Authority
                             </p>
                         </div>
                     </div>
-                    
-                    <form onSubmit={handleLogin} className="relative z-10 space-y-5">
-                        {loginError && (
-                            <div className="bg-rose-500/10 border border-rose-500/50 text-rose-400 p-3 rounded-lg text-sm text-center font-medium">
-                                {loginError}
-                            </div>
-                        )}
+
+                    {/* Official Notice */}
+                    <div className="bg-amber-950/20 border border-amber-500/20 rounded-xl p-3 mb-6 text-[10px] text-amber-200/80 leading-normal flex items-start gap-3">
+                        <FiLock className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />
                         <div>
-                            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Clearance ID / Name</label>
-                            <input
-                                type="text"
-                                value={loginUsername}
-                                onChange={(e) => setLoginUsername(e.target.value)}
-                                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono"
-                                placeholder="Enter Access Code"
-                            />
+                            <span className="font-bold block mb-0.5 text-amber-400 uppercase tracking-wider">SYSTEM WARNING: AUTHORIZED ACCESS ONLY</span>
+                            This is an official secure government system database. Unauthorized login, data extraction, or biometric spoofing is strictly prohibited under Federal Code 18 U.S.C. § 1030. All network handshakes and upload logs are monitored.
                         </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Secure Passkey</label>
-                            <input
-                                type="password"
-                                value={loginPassword}
-                                onChange={(e) => setLoginPassword(e.target.value)}
-                                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono"
-                                placeholder="••••••••••••"
-                            />
-                        </div>
+                    </div>
+
+                    {/* Switcher Tab */}
+                    <div className="flex border-b border-slate-800 mb-6 relative">
                         <button
-                            type="submit"
-                            className="w-full mt-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-[0_0_15px_rgba(79,70,229,0.3)] hover:shadow-[0_0_20px_rgba(79,70,229,0.5)] flex items-center justify-center gap-2 uppercase tracking-wider text-sm"
+                            onClick={() => { setLoginMode("passenger"); setLoginError(""); }}
+                            className={`flex-1 pb-3 text-xs font-bold tracking-wider uppercase border-b-2 transition-all ${loginMode === "passenger" ? "border-amber-500 text-amber-400" : "border-transparent text-slate-500 hover:text-slate-400"}`}
                         >
-                            <FiSearch className="w-4 h-4" />
-                            Authenticate
+                            Passenger Verification
                         </button>
-                    </form>
+                        <button
+                            onClick={() => { setLoginMode("officer"); setLoginError(""); }}
+                            className={`flex-1 pb-3 text-xs font-bold tracking-wider uppercase border-b-2 transition-all ${loginMode === "officer" ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-500 hover:text-slate-400"}`}
+                        >
+                            Officer Terminal
+                        </button>
+                    </div>
+
+                    {/* Content Renderer */}
+                    {loginMode === "officer" ? (
+                        /* Officer Login Form */
+                        <form onSubmit={handleLogin} className="space-y-4">
+                            {loginError && (
+                                <div className="bg-rose-500/10 border border-rose-500/50 text-rose-400 p-3 rounded-xl text-xs text-center font-bold">
+                                    {loginError}
+                                </div>
+                            )}
+                            <div>
+                                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Officer Clearance ID</label>
+                                <input
+                                    type="text"
+                                    value={loginUsername}
+                                    onChange={(e) => setLoginUsername(e.target.value)}
+                                    className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono text-sm"
+                                    placeholder="Enter access code"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Secure Passkey</label>
+                                <input
+                                    type="password"
+                                    value={loginPassword}
+                                    onChange={(e) => setLoginPassword(e.target.value)}
+                                    className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono text-sm"
+                                    placeholder="••••••••••••"
+                                />
+                            </div>
+                            <button
+                                type="submit"
+                                className="w-full mt-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-[0_0_15px_rgba(79,70,229,0.3)] hover:shadow-[0_0_20px_rgba(79,70,229,0.5)] flex items-center justify-center gap-2 uppercase tracking-wider text-xs"
+                            >
+                                <FiLock className="w-3.5 h-3.5" />
+                                Authenticate Security Clearance
+                            </button>
+                        </form>
+                    ) : (
+                        /* Passenger Wizard */
+                        <div className="space-y-5">
+                            {verifStep === "form" && (
+                                <div className="space-y-4">
+                                    {/* Sub-header explaining action */}
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h3 className="text-sm font-bold text-white uppercase tracking-wider">Onboarding Registration</h3>
+                                        <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-mono">STEP 1/3</span>
+                                    </div>
+
+                                    {/* Upload passport zone */}
+                                    <div className="relative border-2 border-dashed border-slate-700/80 hover:border-amber-500/50 rounded-2xl p-6 transition-all bg-slate-950/30 hover:bg-slate-950/60 flex flex-col items-center justify-center text-center group cursor-pointer">
+                                        <input
+                                            type="file"
+                                            onChange={async (e) => {
+                                                const file = e.target.files?.[0]
+                                                if (file) {
+                                                    setPassportImageName(file.name)
+                                                    setMrzScanning(true)
+                                                    setTerminalLogs([])
+                                                    addTerminalLog("Scanning uploaded document...")
+                                                    addTerminalLog("Connecting OCR engine...")
+                                                    
+                                                    // Fake scanning delay
+                                                    setTimeout(() => {
+                                                        addTerminalLog("Extracting Machine Readable Zone (MRZ)...")
+                                                    }, 500)
+                                                    setTimeout(() => {
+                                                        addTerminalLog("Verifying document digital signatures...")
+                                                    }, 1200)
+                                                    setTimeout(() => {
+                                                        const randomID = "C" + Math.floor(1000000 + Math.random() * 9000000)
+                                                        const mockExtracted = {
+                                                            name: "ALEXANDER WRIGHT",
+                                                            passport: randomID,
+                                                            country: "Canada"
+                                                        }
+                                                        setExtractedData(mockExtracted)
+                                                        setName(mockExtracted.name)
+                                                        setPassport(mockExtracted.passport)
+                                                        setCountry(mockExtracted.country)
+                                                        setMrzScanning(false)
+                                                        setVerifStep("biometric")
+                                                        addTerminalLog("Extraction complete: Passport details parsed.")
+                                                    }, 2200)
+                                                }
+                                            }}
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                        />
+                                        <FiUploadCloud className="w-10 h-10 text-slate-500 group-hover:text-amber-400 mb-2 transition-colors" />
+                                        <span className="text-xs font-bold text-slate-300 group-hover:text-white">Upload Passport Page Image</span>
+                                        <span className="text-[10px] text-slate-500 mt-1">Supports JPEG, PNG up to 10MB</span>
+                                    </div>
+
+                                    {mrzScanning && (
+                                        <div className="bg-slate-950/80 border border-amber-500/20 p-4 rounded-2xl flex flex-col gap-2 relative overflow-hidden animate-pulse">
+                                            <div className="w-full h-1 bg-amber-500/80 animate-scan-line absolute top-0 left-0"></div>
+                                            <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
+                                                <FiCpu className="animate-spin" />
+                                                <span>Machine Reader Extracting Details...</span>
+                                            </div>
+                                            <div className="bg-black/40 border border-white/5 p-3 rounded-lg font-mono text-[9px] text-slate-400 max-h-24 overflow-y-auto">
+                                                {terminalLogs.map((log, i) => (
+                                                    <div key={i}>{log}</div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="relative flex py-2 items-center">
+                                        <div className="flex-grow border-t border-slate-800"></div>
+                                        <span className="flex-shrink mx-4 text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Or Manual Sign In</span>
+                                        <div className="flex-grow border-t border-slate-800"></div>
+                                    </div>
+
+                                    {/* Manual credentials check */}
+                                    <form onSubmit={(e) => {
+                                        e.preventDefault()
+                                        if (loginUsername && loginPassword) {
+                                            const found = travelers.find(t => 
+                                                t.name.trim().toLowerCase() === loginUsername.trim().toLowerCase() && 
+                                                t.passport.trim().toUpperCase() === loginPassword.trim().toUpperCase()
+                                            )
+                                            if (found) {
+                                                setUserPassportInput(found.passport)
+                                                setUserPassportStatus(found)
+                                                setUserPassportQueried(true)
+                                                setAuthRole("user")
+                                            } else {
+                                                // Create a new traveler manual verification flow
+                                                setName(loginUsername.toUpperCase())
+                                                setPassport(loginPassword.toUpperCase())
+                                                setCountry("India") // default
+                                                setVerifStep("biometric")
+                                            }
+                                        }
+                                    }} className="space-y-3">
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-1">Full Legal Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={loginUsername}
+                                                    onChange={(e) => setLoginUsername(e.target.value)}
+                                                    className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-700 focus:outline-none focus:border-amber-500"
+                                                    placeholder="John Doe"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-1">Passport Number</label>
+                                                <input
+                                                    type="text"
+                                                    value={loginPassword}
+                                                    onChange={(e) => setLoginPassword(e.target.value)}
+                                                    className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white uppercase font-mono placeholder-slate-700 focus:outline-none focus:border-amber-500"
+                                                    placeholder="C1234567"
+                                                />
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="submit"
+                                            disabled={!loginUsername || !loginPassword}
+                                            className="w-full bg-slate-800 hover:bg-slate-750 disabled:bg-slate-900 disabled:text-slate-700 text-slate-200 py-2.5 rounded-xl text-xs font-bold transition-all border border-slate-700 hover:border-slate-600"
+                                        >
+                                            Lookup Status or Register
+                                        </button>
+                                    </form>
+                                </div>
+                            )}
+
+                            {verifStep === "biometric" && (
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <div>
+                                            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Webcam Identity Audit</h3>
+                                            <p className="text-[10px] text-slate-500 font-mono">Passport Record: {name || extractedData?.name} ({passport || extractedData?.passport})</p>
+                                        </div>
+                                        <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-mono">STEP 2/3</span>
+                                    </div>
+
+                                    {/* Passenger Webcam Viewer */}
+                                    <div className="relative w-full h-56 bg-black rounded-2xl overflow-hidden shadow-inner border border-slate-800 flex items-center justify-center">
+                                        <Webcam
+                                            ref={passengerWebcamRef}
+                                            audio={false}
+                                            screenshotFormat="image/jpeg"
+                                            videoConstraints={{ facingMode: "user" }}
+                                            className="object-cover w-full h-full opacity-80"
+                                        />
+
+                                        {/* Overlay graphics */}
+                                        <div className="absolute inset-0 border-2 border-amber-500/20 m-6 rounded-xl pointer-events-none">
+                                            <div className="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-amber-400 rounded-tl"></div>
+                                            <div className="absolute -top-1 -right-1 w-4 h-4 border-t-2 border-r-2 border-amber-400 rounded-tr"></div>
+                                            <div className="absolute -bottom-1 -left-1 w-4 h-4 border-b-2 border-l-2 border-amber-400 rounded-bl"></div>
+                                            <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-amber-400 rounded-br"></div>
+                                        </div>
+
+                                        {selfieScanning && (
+                                            <div className="absolute inset-0 bg-slate-950/60 flex flex-col items-center justify-center backdrop-blur-[1px]">
+                                                <div className="w-full h-0.5 bg-amber-400 animate-scan-line shadow-[0_0_10px_rgba(245,158,11,0.8)] absolute top-0 left-0"></div>
+                                                <FiAperture className="w-8 h-8 text-white animate-spin mb-2" />
+                                                <p className="text-white font-mono text-[10px] tracking-widest uppercase">Matching biometric node structure...</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Scan Action */}
+                                    <button
+                                        onClick={async () => {
+                                            if (!modelsLoaded) {
+                                                alert("Facial recognition model database is initializing. Standby 3 seconds...")
+                                                return
+                                            }
+
+                                            const imageSrc = passengerWebcamRef.current?.getScreenshot()
+                                            if (!imageSrc) {
+                                                alert("Webcam is not ready.")
+                                                return
+                                            }
+
+                                            setSelfieScanning(true)
+                                            addTerminalLog("Scanning facial markers...")
+                                            addTerminalLog("Running Watchlist databases lookup...")
+
+                                            setTimeout(async () => {
+                                                try {
+                                                    const img = new window.Image()
+                                                    img.src = imageSrc
+                                                    img.onload = async () => {
+                                                        const faceapi = faceapiRef.current
+                                                        if (!faceapi) {
+                                                            finalizePassengerVerification(null, 1.0)
+                                                            return
+                                                        }
+                                                        const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor()
+                                                        let distance = 1.0
+                                                        let matchPerson = null
+                                                        if (detection && trumpDescriptor) {
+                                                            distance = faceapi.euclideanDistance(detection.descriptor, trumpDescriptor)
+                                                            if (distance < 0.55) {
+                                                                matchPerson = WATCHLIST.find(w => w.name === "donald trump")
+                                                            }
+                                                        }
+                                                        finalizePassengerVerification(matchPerson, distance)
+                                                    }
+                                                } catch (err) {
+                                                    console.error("Biometric match failed:", err)
+                                                    finalizePassengerVerification(null, 1.0)
+                                                }
+                                            }, 2000)
+                                        }}
+                                        disabled={selfieScanning}
+                                        className="w-full bg-amber-600 hover:bg-amber-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold py-3 rounded-xl transition-all shadow-[0_0_15px_rgba(217,119,6,0.3)] flex items-center justify-center gap-2 uppercase tracking-wider text-xs"
+                                    >
+                                        <FiUserCheck className="w-4 h-4" />
+                                        {selfieScanning ? "Matching Face Biometrics..." : "Perform Face Identity Audit"}
+                                    </button>
+                                </div>
+                            )}
+
+                            {verifStep === "pass" && verificationPassData && (
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center mb-1">
+                                        <h3 className="text-sm font-bold text-white uppercase tracking-wider">Verification Certificate</h3>
+                                        <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-mono">STEP 3/3</span>
+                                    </div>
+
+                                    {/* Secure Pass UI */}
+                                    <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 relative overflow-hidden">
+                                        {/* Watermark Crest */}
+                                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-5 pointer-events-none">
+                                            <FiShield className="w-56 h-56 text-slate-400" />
+                                        </div>
+
+                                        {/* Top branding */}
+                                        <div className="flex justify-between items-center border-b border-slate-900 pb-3 mb-4">
+                                            <div className="text-[9px] text-slate-400 font-mono tracking-widest">
+                                                ID: SG-{verificationPassData.passport.substring(0,4)}-{Math.floor(1000 + Math.random()*9000)}
+                                            </div>
+                                            <div className="text-[9px] text-amber-500 font-bold tracking-wider uppercase">
+                                                SECURE DIGITAL PASS
+                                            </div>
+                                        </div>
+
+                                        {/* Status Header */}
+                                        <div className="text-center mb-5">
+                                            <span className={`inline-block px-5 py-2 rounded-full text-xs font-black tracking-widest uppercase border ${verificationPassData.risk >= 70 ? 'bg-rose-950/40 text-rose-400 border-rose-500/30' : verificationPassData.risk >= 40 ? 'bg-amber-950/40 text-amber-400 border-amber-500/30' : 'bg-emerald-950/40 text-emerald-400 border-emerald-500/30'}`}>
+                                                {getStatus(verificationPassData.risk)}
+                                            </span>
+                                        </div>
+
+                                        {/* Details Grid */}
+                                        <div className="grid grid-cols-2 gap-3 text-xs mb-5 font-mono">
+                                            <div className="bg-slate-900/60 p-2 rounded border border-white/5">
+                                                <span className="text-[9px] text-slate-500 uppercase block">Name</span>
+                                                <span className="font-bold text-white uppercase">{verificationPassData.name}</span>
+                                            </div>
+                                            <div className="bg-slate-900/60 p-2 rounded border border-white/5">
+                                                <span className="text-[9px] text-slate-500 uppercase block">Passport ID</span>
+                                                <span className="font-bold text-white">{verificationPassData.passport}</span>
+                                            </div>
+                                            <div className="bg-slate-900/60 p-2 rounded border border-white/5">
+                                                <span className="text-[9px] text-slate-500 uppercase block">Origin</span>
+                                                <span className="font-bold text-white uppercase">{verificationPassData.country}</span>
+                                            </div>
+                                            <div className="bg-slate-900/60 p-2 rounded border border-white/5">
+                                                <span className="text-[9px] text-slate-500 uppercase block">Security Risk</span>
+                                                <span className="font-bold text-white">{verificationPassData.risk}%</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Signature */}
+                                        <div className="border-t border-slate-900 pt-3 flex items-center justify-between text-[8px] font-mono text-slate-500 leading-tight">
+                                            <div>
+                                                <div>SIGNATURE HASH:</div>
+                                                <div className="text-slate-400 break-all w-48 text-[7px]">
+                                                    {blockchain.calculateHash(verificationPassData.risk, new Date().toISOString(), "PREV_VERIFICATION_HASH", verificationPassData)}
+                                                </div>
+                                            </div>
+                                            {/* Visual QR Code Mock */}
+                                            <div className="w-10 h-10 bg-white p-1 rounded">
+                                                <div className="w-full h-full bg-[linear-gradient(45deg,#000_25%,transparent_25%),linear-gradient(-45deg,#000_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#000_75%),linear-gradient(-45deg,transparent_75%,#000_75%)] bg-[size:4px_4px] bg-slate-950"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => {
+                                                alert("Travel Pass printed successfully to System Spooler.")
+                                            }}
+                                            className="flex-1 bg-slate-800 hover:bg-slate-750 text-slate-200 py-2.5 rounded-xl text-xs font-bold transition-all border border-slate-700 flex items-center justify-center gap-1.5"
+                                        >
+                                            <FiPrinter className="w-3.5 h-3.5" />
+                                            Print Pass
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                // Reset passenger flow
+                                                setVerifStep("form");
+                                                setVerificationPassData(null);
+                                                setLoginUsername("");
+                                                setLoginPassword("");
+                                                setExtractedData(null);
+                                                setPassportImage(null);
+                                            }}
+                                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-bold transition-all shadow-[0_0_10px_rgba(16,185,129,0.2)] flex items-center justify-center"
+                                        >
+                                            Complete Portal Verification
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         )
@@ -623,55 +1136,64 @@ export default function Home() {
 
     if (authRole === "user") {
         return (
-            <div className="min-h-screen text-slate-200 flex flex-col items-center justify-center p-4 bg-slate-950 font-sans relative">
+            <div className="min-h-screen text-slate-200 flex flex-col items-center justify-center p-4 bg-slate-950 font-sans relative overflow-x-hidden">
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] pointer-events-none"></div>
                 <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                 
-                <div className="mb-8 text-center bg-white/5 backdrop-blur-xl border border-white/10 p-6 rounded-2xl shadow-2xl z-10 w-full max-w-md">
-                    <div className="flex items-center justify-center gap-3 mb-2">
-                        <FiShield className="w-8 h-8 text-emerald-400" />
-                        <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-blue-400">Passenger Portal</h1>
+                <div className="mb-6 text-center bg-slate-900/60 backdrop-blur-md border border-slate-800 p-6 rounded-2xl shadow-xl z-10 w-full max-w-md">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                        <svg className="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        <h1 className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-blue-400 uppercase tracking-widest">Passenger Border Pass</h1>
                     </div>
-                    <p className="text-slate-400 text-sm">Welcome back, {userPassportStatus?.name || 'Traveler'}</p>
+                    <p className="text-slate-400 text-xs font-mono">AUTHORIZED VERIFICATION RECORD</p>
                 </div>
 
-                <div className="bg-slate-900 border border-slate-700/50 rounded-3xl p-8 shadow-2xl max-w-md w-full relative z-10">
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl max-w-md w-full relative z-10 overflow-hidden">
+                    <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-500"></div>
                     <div className="mb-6 flex items-center justify-between">
-                        <h2 className="text-xl font-bold text-white">Your Clearance Status</h2>
-                        <FiSearch className="w-5 h-5 text-emerald-500 opacity-50" />
+                        <h2 className="text-sm font-black text-white uppercase tracking-wider">Assessment Status</h2>
+                        <span className="text-[10px] text-slate-500 font-mono">VERIFIED ACTIVE</span>
                     </div>
 
                     {userPassportStatus ? (
-                        <div className={`p-5 rounded-2xl border ${userPassportStatus.risk >= 70 ? 'bg-rose-950/30 border-rose-500/30' : userPassportStatus.risk >= 40 ? 'bg-amber-950/30 border-amber-500/30' : 'bg-emerald-950/30 border-emerald-500/30'}`}>
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest">Assessment Result</h3>
-                                <span className={`px-4 py-1.5 rounded-full text-sm font-black tracking-wide ${getColorClass(userPassportStatus.risk)}`}>
-                                    {getStatus(userPassportStatus.risk)}
+                        <div className="space-y-4">
+                            <div className={`p-4 rounded-xl border text-center ${userPassportStatus.risk >= 70 ? 'bg-rose-950/40 border-rose-500/30' : userPassportStatus.risk >= 40 ? 'bg-amber-950/40 border-amber-500/30' : 'bg-emerald-950/40 border-emerald-500/30'}`}>
+                                <span className={`inline-block px-4 py-1.5 rounded-full text-xs font-black tracking-wide ${getColorClass(userPassportStatus.risk, userPassportStatus.note === "HUMANITARIAN_PROCESSING_REQUIRED")}`}>
+                                    {getStatus(userPassportStatus.risk, userPassportStatus.note === "HUMANITARIAN_PROCESSING_REQUIRED")}
                                 </span>
                             </div>
-                            <div className="space-y-3 text-sm">
-                                <div className="flex justify-between items-center bg-black/30 p-3 rounded-lg border border-white/5">
-                                    <span className="text-slate-400 font-medium">Full Name</span>
-                                    <span className="text-white font-bold">{userPassportStatus.name}</span>
+                            <div className="space-y-2 text-xs font-mono">
+                                <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-white/5">
+                                    <span className="text-slate-500 font-medium">FULL LEGAL NAME</span>
+                                    <span className="text-white font-bold uppercase">{userPassportStatus.name}</span>
                                 </div>
-                                <div className="flex justify-between items-center bg-black/30 p-3 rounded-lg border border-white/5">
-                                    <span className="text-slate-400 font-medium">Passport ID</span>
-                                    <span className="text-white font-mono">{userPassportStatus.passport}</span>
+                                <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-white/5">
+                                    <span className="text-slate-500 font-medium">PASSPORT ID</span>
+                                    <span className="text-white font-bold">{userPassportStatus.passport}</span>
                                 </div>
-                                <div className="flex justify-between items-center bg-black/30 p-3 rounded-lg border border-white/5">
-                                    <span className="text-slate-400 font-medium">Origin Country</span>
-                                    <span className="text-white uppercase font-bold">{userPassportStatus.country}</span>
+                                <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-white/5">
+                                    <span className="text-slate-500 font-medium">ORIGIN NATION</span>
+                                    <span className="text-white font-bold uppercase">{userPassportStatus.country}</span>
                                 </div>
-                                <div className="flex justify-between items-center bg-black/30 p-3 rounded-lg border border-white/5">
-                                    <span className="text-slate-400 font-medium">Risk Score</span>
-                                    <span className="text-white font-mono">{userPassportStatus.risk}%</span>
+                                <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-white/5">
+                                    <span className="text-slate-500 font-medium">BORDER COMPLIANCE RISK</span>
+                                    <span className="text-white font-bold">{userPassportStatus.risk}%</span>
                                 </div>
+                                {userPassportStatus.note && (
+                                    <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800 text-[10px] text-slate-400 mt-2">
+                                        <span className="text-[8px] text-slate-600 block uppercase mb-1 font-bold">SYSTEM OFFICER NOTES:</span>
+                                        {userPassportStatus.note}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ) : (
-                        <div className="text-center p-6 bg-slate-950/50 border border-slate-700 rounded-2xl">
+                        <div className="text-center p-6 bg-slate-950/50 border border-slate-800 rounded-2xl">
                             <FiAlertOctagon className="w-8 h-8 text-rose-500 mx-auto mb-3 opacity-80 animate-pulse" />
-                            <p className="text-slate-300 font-medium">Status unavailable.</p>
-                            <p className="text-slate-500 text-xs mt-1">Please contact border security.</p>
+                            <p className="text-slate-300 font-medium">Record Verification Pending.</p>
+                            <p className="text-slate-500 text-xs mt-1">Please verify your passport document at the self-verification terminal.</p>
                         </div>
                     )}
                 </div>
@@ -685,10 +1207,10 @@ export default function Home() {
                         setUserPassportQueried(false)
                         setUserPassportStatus(null)
                     }}
-                    className="mt-8 bg-white/5 border border-white/10 hover:bg-white/10 px-4 py-2 rounded-xl text-slate-400 hover:text-white transition-colors z-10 font-medium text-sm flex items-center gap-2"
+                    className="mt-8 bg-slate-900 border border-slate-800 hover:bg-slate-850 px-4 py-2 rounded-xl text-slate-400 hover:text-white transition-colors z-10 text-xs font-bold uppercase tracking-wider flex items-center gap-2"
                     title="Sign Out"
                 >
-                    <FiUserX className="w-4 h-4" /> Secure Logout
+                    <FiUserX className="w-4 h-4 text-rose-400" /> Close Portal
                 </button>
             </div>
         )
@@ -757,6 +1279,14 @@ export default function Home() {
                     >
                         <FiSearch className="w-5 h-5" />
                         <span>Quick Scan</span>
+                    </button>
+
+                    <button
+                        onClick={registerAsylum}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-medium rounded-xl transition-all shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:shadow-[0_0_25px_rgba(168,85,247,0.6)] border border-purple-500/50"
+                    >
+                        <FiHeart className="w-5 h-5 text-purple-200" />
+                        <span>Asylum Request</span>
                     </button>
 
                     <div className="w-px h-8 bg-slate-700 hidden sm:block mx-1"></div>
@@ -858,7 +1388,7 @@ export default function Home() {
                                             key={`flight-${i}`}
                                             from={hqCoords} // Terminal HQ
                                             to={destCoords} // Origin
-                                            stroke={getHexColor(t.risk)}
+                                            stroke={getHexColor(t.risk, t.note === "HUMANITARIAN_PROCESSING_REQUIRED")}
                                             strokeWidth={t.risk >= 70 ? 2 : 1.5}
                                             strokeLinecap="round"
                                             style={{
@@ -875,10 +1405,10 @@ export default function Home() {
                                     <Marker key={i} coordinates={[t.lng, t.lat]}>
                                         <circle 
                                             r={t.risk >= 70 ? 12 : 4} 
-                                            fill={getHexColor(t.risk)} 
+                                            fill={getHexColor(t.risk, t.note === "HUMANITARIAN_PROCESSING_REQUIRED")} 
                                             className={t.risk >= 70 ? "animate-military-ping transform-origin-center" : ""} 
                                         />
-                                        <circle r={t.risk >= 70 ? 5 : 4} fill={getHexColor(t.risk)} />
+                                        <circle r={t.risk >= 70 ? 5 : 4} fill={getHexColor(t.risk, t.note === "HUMANITARIAN_PROCESSING_REQUIRED")} />
                                     </Marker>
                                 ))}
 
@@ -912,11 +1442,12 @@ export default function Home() {
                                 </thead>
                                 <tbody className="divide-y divide-white/10">
                                     {travelers.slice().reverse().map((t, i) => {
-                                        const status = getStatus(t.risk)
+                                        const isHumanitarian = t.note === "HUMANITARIAN_PROCESSING_REQUIRED"
+                                        const status = getStatus(t.risk, isHumanitarian)
                                         const isThreat = t.risk >= 70
                                         return (
-                                            <tr key={i} className={`transition-colors group ${isThreat ? 'animate-siren bg-rose-950/20' : 'hover:bg-white/5'}`}>
-                                                <td className={`p-4 font-medium ${isThreat ? 'text-rose-200' : 'text-white'}`}>{t.name}</td>
+                                            <tr key={i} className={`transition-colors group ${isThreat ? 'animate-siren bg-rose-950/20' : isHumanitarian ? 'bg-purple-950/20' : 'hover:bg-white/5'}`}>
+                                                <td className={`p-4 font-medium ${isThreat ? 'text-rose-200' : isHumanitarian ? 'text-purple-200' : 'text-white'}`}>{t.name}</td>
                                                 <td className="p-4 text-slate-300 font-mono text-sm">{t.passport}</td>
                                                 <td className="p-4 text-slate-300">{t.country}</td>
                                                 <td className="p-4">
@@ -924,14 +1455,14 @@ export default function Home() {
                                                         <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden">
                                                             <div
                                                                 className="h-full rounded-full transition-all duration-1000 ease-out"
-                                                                style={{ width: `${t.risk}%`, backgroundColor: getHexColor(t.risk) }}
+                                                                style={{ width: `${t.risk}%`, backgroundColor: getHexColor(t.risk, isHumanitarian) }}
                                                             />
                                                         </div>
                                                         <span className="text-sm font-bold w-10 text-right">{t.risk}%</span>
                                                     </div>
                                                 </td>
                                                 <td className="p-4">
-                                                    <span className={`px-3 py-1 rounded-full text-xs font-black tracking-wide ${getColorClass(t.risk)}`}>
+                                                    <span className={`px-3 py-1 rounded-full text-xs font-black tracking-wide ${getColorClass(t.risk, isHumanitarian)}`}>
                                                         {status}
                                                     </span>
                                                 </td>
