@@ -803,8 +803,8 @@ export default function Home() {
     const finalizePassengerVerification = async (matchedWatchPerson: any, distance: number) => {
         setSelfieScanning(false)
         
-        let finalName = name || "Amanda Ross"
-        let finalPassport = passport || "P8204921"
+        let finalName = currentUserProfile?.name || name || "Amanda Ross"
+        let finalPassport = currentUserProfile?.passport || passport || "P8204921"
         let finalCountry = country || currentUserProfile?.country || "India"
 
         if (extractedData) {
