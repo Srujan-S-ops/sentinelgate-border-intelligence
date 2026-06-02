@@ -245,7 +245,7 @@ export default function Home() {
                 setSelectedTravelerDetail({
                     ...traveler,
                     email: "unregistered_traveler@sentinelgate.gov",
-                    phone: "+1 (555) 019-2831 (System Fallback)",
+                    phone: "+91 98765 43210 (System Fallback)",
                     dob: "1992-05-14",
                     flightNo: traveler.note === "HUMANITARIAN_PROCESSING_REQUIRED" ? "UN-011" : "SG-302",
                     isRegisteredUser: false
@@ -608,7 +608,7 @@ export default function Home() {
             console.error("OCR scan failed or server offline. Using mock fallback.", err)
             // Fallback mock payload
             const randomID = "F" + Math.floor(Math.random() * 1000000)
-            travelerData = { name: "John Doe (OCR Mock)", passport: randomID, country: "USA" }
+            travelerData = { name: "John Doe (OCR Mock)", passport: randomID, country: "India" }
             alert("OCR Server offline - Using fallback mock data.")
         }
 
@@ -805,7 +805,7 @@ export default function Home() {
         
         let finalName = name || "Amanda Ross"
         let finalPassport = passport || "P8204921"
-        let finalCountry = country || currentUserProfile?.country || "Canada"
+        let finalCountry = country || currentUserProfile?.country || "India"
 
         if (extractedData) {
             finalName = extractedData.name
@@ -1043,7 +1043,7 @@ export default function Home() {
                                                 value={signupPhone}
                                                 onChange={(e) => setSignupPhone(e.target.value)}
                                                 className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-700 focus:outline-none focus:border-amber-500"
-                                                placeholder="+1 (555) 012-3456"
+                                                placeholder="+91 98765 43210"
                                                 required
                                             />
                                         </div>
@@ -1419,7 +1419,7 @@ export default function Home() {
                                                             const mockExtracted = {
                                                                 name: currentUserProfile?.name || "ALEXANDER WRIGHT",
                                                                 passport: currentUserProfile?.passport || "P1038291",
-                                                                country: "Canada"
+                                                                country: "India"
                                                             }
                                                             setExtractedData(mockExtracted)
                                                             setName(mockExtracted.name)
@@ -1661,7 +1661,7 @@ export default function Home() {
                                         name="phone"
                                         defaultValue={currentUserProfile?.phone}
                                         className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-700 focus:outline-none focus:border-blue-500"
-                                        placeholder="+1 (555) 012-3456"
+                                        placeholder="+91 98765 43210"
                                     />
                                 </div>
                                 <div>
