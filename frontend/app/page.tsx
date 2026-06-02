@@ -1104,156 +1104,7 @@ export default function Home() {
         const currentRisk = currentUserProfile?.risk ?? 20;
         const finalStatus = getStatus(currentRisk);
 
-        const needsDeclaration = !currentUserProfile?.passport || !currentUserProfile?.dob || !currentUserProfile?.flightNo;
 
-        if (needsDeclaration) {
-            return (
-                <div className="min-h-screen text-slate-200 flex items-center justify-center p-4 bg-slate-950 font-sans relative overflow-x-hidden">
-                    {/* Background animations */}
-                    <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] pointer-events-none"></div>
-                    <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 pointer-events-none"></div>
-                    <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl translate-y-1/2 pointer-events-none"></div>
-
-                    <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700/50 rounded-3xl p-6 sm:p-8 shadow-2xl max-w-xl w-full relative overflow-hidden z-10">
-                        {/* Glowing status bar */}
-                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-500"></div>
-
-                        {/* Crest Header */}
-                        <div className="relative z-10 flex flex-col items-center gap-2 mb-6 text-center">
-                            <div className="flex items-center justify-center p-3 bg-slate-950 border border-slate-800 rounded-full relative shadow-inner">
-                                <svg className="w-12 h-12 text-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.3)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <h1 className="text-xl tracking-tight font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-slate-200 to-amber-400 pt-1">
-                                    TRAVEL DETAIL DECLARATION
-                                </h1>
-                                <p className="text-[10px] text-slate-500 tracking-[0.2em] font-black uppercase mt-1">
-                                    SentinelGate Border Compliance Authority
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Official Notice */}
-                        <div className="bg-amber-950/20 border border-amber-500/20 rounded-xl p-3 mb-6 text-[10px] text-amber-200/80 leading-normal flex items-start gap-3">
-                            <FiLock className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />
-                            <div>
-                                <span className="font-bold block mb-0.5 text-amber-400 uppercase tracking-wider">MANDATORY DECLARATION PROMPT</span>
-                                Please provide your passport details, date of birth, and flight number to verify your identity. This is required to access your digital border clearance token and check verification status.
-                            </div>
-                        </div>
-
-                        <form
-                            onSubmit={async (e) => {
-                                e.preventDefault();
-                                if (!declPassport || !declDob || !declFlight || !declCountry) {
-                                    alert("Please fill in all details.");
-                                    return;
-                                }
-                                const risk = calculateRisk(currentUserProfile?.name || "", declPassport, declCountry);
-                                const updatedData = {
-                                    passport: declPassport.trim().toUpperCase(),
-                                    dob: declDob,
-                                    flightNo: declFlight.trim().toUpperCase(),
-                                    country: declCountry,
-                                    risk: risk,
-                                    verified: false
-                                };
-                                try {
-                                    if (auth.currentUser) {
-                                        await updateUserProfile(auth.currentUser.uid, updatedData);
-                                        setCurrentUserProfile((prev: any) => ({
-                                            ...prev,
-                                            ...updatedData
-                                        }));
-                                        // Update states so scanning works correctly
-                                        setUserPassportInput(declPassport.trim().toUpperCase());
-                                        setPassport(declPassport.trim().toUpperCase());
-                                        setCountry(declCountry);
-                                    }
-                                } catch (err: any) {
-                                    console.error("Error saving declaration:", err);
-                                    alert("Failed to save credentials: " + err.message);
-                                }
-                            }}
-                            className="space-y-4"
-                        >
-                            <div>
-                                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Passport Number</label>
-                                <input
-                                    type="text"
-                                    value={declPassport}
-                                    onChange={(e) => setDeclPassport(e.target.value)}
-                                    className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all font-mono text-sm uppercase"
-                                    placeholder="e.g. A1234567"
-                                    required
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Date of Birth</label>
-                                    <input
-                                        type="date"
-                                        value={declDob}
-                                        onChange={(e) => setDeclDob(e.target.value)}
-                                        className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all text-sm font-mono"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Flight Number</label>
-                                    <input
-                                        type="text"
-                                        value={declFlight}
-                                        onChange={(e) => setDeclFlight(e.target.value)}
-                                        className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all font-mono text-sm uppercase"
-                                        placeholder="e.g. SG-101"
-                                        required
-                                    />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Country of Citizenship</label>
-                                <select
-                                    value={declCountry}
-                                    onChange={(e) => setDeclCountry(e.target.value)}
-                                    className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all text-sm font-semibold"
-                                    required
-                                >
-                                    <option value="India">India</option>
-                                    <option value="USA">United States</option>
-                                    <option value="Canada">Canada</option>
-                                    <option value="UK">United Kingdom</option>
-                                    <option value="Germany">Germany</option>
-                                    <option value="France">France</option>
-                                    <option value="Australia">Australia</option>
-                                    <option value="Singapore">Singapore</option>
-                                </select>
-                            </div>
-
-                            <button
-                                type="submit"
-                                className="w-full mt-4 bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-[0_0_15px_rgba(217,119,6,0.3)] hover:shadow-[0_0_20px_rgba(217,119,6,0.5)] flex items-center justify-center gap-2 uppercase tracking-wider text-xs"
-                            >
-                                <FiUserCheck className="w-4 h-4" />
-                                Declare Details & Continue
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={handleLogout}
-                                className="w-full bg-slate-800 hover:bg-slate-700 text-slate-350 py-3 rounded-xl text-xs font-bold transition-all border border-slate-700 flex items-center justify-center gap-2 uppercase tracking-wider"
-                            >
-                                <FiUserX className="w-4 h-4" /> Cancel & Sign Out
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )
-        }
 
         return (
             <div className="min-h-screen text-slate-200 p-4 md:p-8 bg-slate-950 font-sans relative overflow-x-hidden">
@@ -1536,11 +1387,11 @@ export default function Home() {
                                                     }
                                                 }, 2000)
                                             }}
-                                            disabled={selfieScanning}
+                                            disabled={selfieScanning || !currentUserProfile?.passport}
                                             className="w-full bg-amber-600 hover:bg-amber-500 disabled:bg-slate-800 disabled:text-slate-650 text-white font-bold py-3 rounded-xl transition-all shadow-[0_0_15px_rgba(217,119,6,0.3)] flex items-center justify-center gap-2 uppercase tracking-wider text-xs"
                                         >
                                             <FiUserCheck className="w-4 h-4" />
-                                            {selfieScanning ? "Matching Face Biometrics..." : "Perform Face Identity Audit"}
+                                            {!currentUserProfile?.passport ? "Enter Passport ID in Dossier to Unlock Scan" : selfieScanning ? "Matching Face Biometrics..." : "Perform Face Identity Audit"}
                                         </button>
                                     </div>
                                 )}
@@ -1557,24 +1408,52 @@ export default function Home() {
                                 </span>
                             </div>
 
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-mono">
-                                <div>
-                                    <span className="text-[9px] text-slate-500 block uppercase mb-1">Flight Number</span>
-                                    <span className="font-bold text-white text-sm">{currentUserProfile?.flightNo || "SG-101"}</span>
+                            {currentUserProfile?.flightNo ? (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-mono">
+                                    <div>
+                                        <span className="text-[9px] text-slate-500 block uppercase mb-1">Flight Number</span>
+                                        <span className="font-bold text-white text-sm">{currentUserProfile?.flightNo}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-[9px] text-slate-500 block uppercase mb-1">Departure</span>
+                                        <span className="font-bold text-white text-sm">New Delhi (DEL)</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-[9px] text-slate-500 block uppercase mb-1">Arrival HQ</span>
+                                        <span className="font-bold text-white text-sm">Immigration HQ</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-[9px] text-slate-500 block uppercase mb-1">Boarding Gate</span>
+                                        <span className="font-bold text-amber-400 text-sm">Gate B12</span>
+                                    </div>
                                 </div>
-                                <div>
-                                    <span className="text-[9px] text-slate-500 block uppercase mb-1">Departure</span>
-                                    <span className="font-bold text-white text-sm">New Delhi (DEL)</span>
-                                </div>
-                                <div>
-                                    <span className="text-[9px] text-slate-500 block uppercase mb-1">Arrival HQ</span>
-                                    <span className="font-bold text-white text-sm">Immigration HQ</span>
-                                </div>
-                                <div>
-                                    <span className="text-[9px] text-slate-500 block uppercase mb-1">Boarding Gate</span>
-                                    <span className="font-bold text-amber-400 text-sm">Gate B12</span>
-                                </div>
-                            </div>
+                            ) : (
+                                <form onSubmit={async (e) => {
+                                    e.preventDefault();
+                                    const val = (e.currentTarget.elements.namedItem("flightNo") as HTMLInputElement).value.trim().toUpperCase();
+                                    if (val) {
+                                        await updateUserProfile(auth.currentUser.uid, { flightNo: val });
+                                        setCurrentUserProfile((prev: any) => ({ ...prev, flightNo: val }));
+                                    }
+                                }} className="flex flex-col sm:flex-row gap-3 items-end sm:items-center bg-slate-950/60 p-4 border border-slate-800 rounded-2xl w-full">
+                                    <div className="flex-1 w-full">
+                                        <label className="block text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5">Enter Flight Connection Number</label>
+                                        <input
+                                            type="text"
+                                            name="flightNo"
+                                            placeholder="e.g. SG-101"
+                                            required
+                                            className="w-full bg-slate-900 border border-slate-705/50 rounded-xl px-4 py-2 text-xs text-white placeholder-slate-700 focus:outline-none focus:border-blue-500 font-mono uppercase"
+                                        />
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-xl text-xs uppercase tracking-wider transition-colors shrink-0 w-full sm:w-auto"
+                                    >
+                                        Link Flight
+                                    </button>
+                                </form>
+                            )}
                         </div>
                     </div>
 
@@ -1601,7 +1480,23 @@ export default function Home() {
                                 </div>
                                 <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-slate-800">
                                     <span className="text-slate-500">PASSPORT ID</span>
-                                    <span className="text-white font-bold">{currentUserProfile?.passport}</span>
+                                    {currentUserProfile?.passport ? (
+                                        <span className="text-white font-bold">{currentUserProfile?.passport}</span>
+                                    ) : (
+                                        <form onSubmit={async (e) => {
+                                            e.preventDefault();
+                                            const val = (e.currentTarget.elements.namedItem("passport") as HTMLInputElement).value.trim().toUpperCase();
+                                            if (val) {
+                                                await updateUserProfile(auth.currentUser.uid, { passport: val });
+                                                setCurrentUserProfile((prev: any) => ({ ...prev, passport: val }));
+                                                setUserPassportInput(val);
+                                                setPassport(val);
+                                            }
+                                        }} className="flex gap-2">
+                                            <input type="text" name="passport" placeholder="Enter Passport" required className="bg-slate-950/60 border border-slate-850 rounded-lg px-2 py-1 text-xs text-white uppercase focus:outline-none focus:border-emerald-500 w-28 placeholder-slate-700 font-mono" />
+                                            <button type="submit" className="bg-emerald-650 hover:bg-emerald-600 text-white text-[10px] font-bold px-2 py-1 rounded">Save</button>
+                                        </form>
+                                    )}
                                 </div>
                                 <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-slate-800">
                                     <span className="text-slate-500">EMAIL ADDRESS</span>
@@ -1613,7 +1508,49 @@ export default function Home() {
                                 </div>
                                 <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-slate-800">
                                     <span className="text-slate-500">DATE OF BIRTH</span>
-                                    <span className="text-white font-bold">{currentUserProfile?.dob}</span>
+                                    {currentUserProfile?.dob ? (
+                                        <span className="text-white font-bold">{currentUserProfile?.dob}</span>
+                                    ) : (
+                                        <form onSubmit={async (e) => {
+                                            e.preventDefault();
+                                            const val = (e.currentTarget.elements.namedItem("dob") as HTMLInputElement).value;
+                                            if (val) {
+                                                await updateUserProfile(auth.currentUser.uid, { dob: val });
+                                                setCurrentUserProfile((prev: any) => ({ ...prev, dob: val }));
+                                            }
+                                        }} className="flex gap-2">
+                                            <input type="date" name="dob" required className="bg-slate-950/60 border border-slate-850 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-emerald-500 w-28 font-mono" />
+                                            <button type="submit" className="bg-emerald-650 hover:bg-emerald-600 text-white text-[10px] font-bold px-2 py-1 rounded">Save</button>
+                                        </form>
+                                    )}
+                                </div>
+                                <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-slate-800">
+                                    <span className="text-slate-500">CITIZENSHIP</span>
+                                    {currentUserProfile?.country ? (
+                                        <span className="text-white font-bold uppercase">{currentUserProfile?.country}</span>
+                                    ) : (
+                                        <form onSubmit={async (e) => {
+                                            e.preventDefault();
+                                            const val = (e.currentTarget.elements.namedItem("country") as HTMLSelectElement).value;
+                                            if (val) {
+                                                await updateUserProfile(auth.currentUser.uid, { country: val });
+                                                setCurrentUserProfile((prev: any) => ({ ...prev, country: val }));
+                                                setCountry(val);
+                                            }
+                                        }} className="flex gap-2">
+                                            <select name="country" required className="bg-slate-950/60 border border-slate-850 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-500 w-28">
+                                                <option value="India">India</option>
+                                                <option value="USA">United States</option>
+                                                <option value="Canada">Canada</option>
+                                                <option value="UK">United Kingdom</option>
+                                                <option value="Germany">Germany</option>
+                                                <option value="France">France</option>
+                                                <option value="Australia">Australia</option>
+                                                <option value="Singapore">Singapore</option>
+                                            </select>
+                                            <button type="submit" className="bg-emerald-650 hover:bg-emerald-600 text-white text-[10px] font-bold px-2 py-1 rounded">Save</button>
+                                        </form>
+                                    )}
                                 </div>
                                 <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-slate-800">
                                     <span className="text-slate-500">BIOMETRIC SECURITY SCORE</span>
