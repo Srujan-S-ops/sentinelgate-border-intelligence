@@ -7,7 +7,10 @@ import {
     orderBy, 
     limit, 
     writeBatch, 
-    doc 
+    doc,
+    setDoc,
+    getDoc,
+    where
 } from "firebase/firestore"
 
 // Default Watchlist to pre-populate database if empty
@@ -115,4 +118,39 @@ export async function clearAllCollections() {
         })
         await batch.commit()
     }
+}
+
+// 5. Users Table / Collection (Passenger Accounts)
+export async function createUserProfile(uid: string, profile: any) {
+    const docRef = doc(db, "users", uid)
+    await setDoc(docRef, {
+        ...profile,
+        createdAt: new Date().toISOString()
+    })
+    return { uid, ...profile }
+}
+
+export async function getUserProfile(uid: string) {
+    const docRef = doc(db, "users", uid)
+    const snapshot = await getDoc(docRef)
+    if (snapshot.exists()) {
+        return { uid: snapshot.id, ...snapshot.data() } as any
+    }
+    return null
+}
+
+export async function getUserByPassport(passport: string) {
+    const colRef = collection(db, "users")
+    const q = query(colRef, where("passport", "==", passport.toUpperCase().trim()))
+    const snapshot = await getDocs(q)
+    if (!snapshot.empty) {
+        const firstDoc = snapshot.docs[0]
+        return { uid: firstDoc.id, ...firstDoc.data() } as any
+    }
+    return null
+}
+
+export async function updateUserProfile(uid: string, data: any) {
+    const docRef = doc(db, "users", uid)
+    await setDoc(docRef, data, { merge: true })
 }

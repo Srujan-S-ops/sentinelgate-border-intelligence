@@ -27,7 +27,10 @@ import {
     FiFileText,
     FiPrinter,
     FiUserCheck,
-    FiCpu
+    FiCpu,
+    FiMail,
+    FiPhone,
+    FiCalendar
 } from "react-icons/fi"
 import Webcam from "react-webcam"
 import { GiCrossedSwords } from "react-icons/gi"
@@ -39,8 +42,20 @@ import {
     getAuditLogs,
     addAuditLog,
     getWatchlist,
-    clearAllCollections
+    clearAllCollections,
+    createUserProfile,
+    getUserProfile,
+    getUserByPassport,
+    updateUserProfile
 } from "@/lib/database"
+import { auth } from "@/lib/firebase"
+import {
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut,
+    GoogleAuthProvider,
+    signInWithPopup
+} from "firebase/auth"
 import Script from "next/script"
 import { FiTrash2 } from "react-icons/fi"
 import { SimpleBlockchain, Block } from "@/lib/blockchain"
@@ -61,9 +76,26 @@ const WATCHLIST = [
 export default function Home() {
     // AUTHENTICATION
     const [authRole, setAuthRole] = useState<"admin" | "user" | null>(null)
-    const [loginUsername, setLoginUsername] = useState("")
-    const [loginPassword, setLoginPassword] = useState("")
+    const [loginUsername, setLoginUsername] = useState("") // Will be used for email in Sign In
+    const [loginPassword, setLoginPassword] = useState("") // Will be used for password in Sign In
     const [loginError, setLoginError] = useState("")
+
+    // FIREBASE AUTH & PASSENGER PROFILE STATES
+    const [currentUserProfile, setCurrentUserProfile] = useState<any>(null)
+    const [authAction, setAuthAction] = useState<"signin" | "signup">("signin")
+    
+    // Signup Form fields
+    const [signupEmail, setSignupEmail] = useState("")
+    const [signupPassword, setSignupPassword] = useState("")
+    const [signupName, setSignupName] = useState("")
+    const [signupPhone, setSignupPhone] = useState("")
+    const [signupDob, setSignupDob] = useState("")
+    const [signupPassport, setSignupPassport] = useState("")
+    const [signupFlight, setSignupFlight] = useState("")
+
+    // Admin detail inspector modal states
+    const [selectedTravelerDetail, setSelectedTravelerDetail] = useState<any>(null)
+    const [showDetailModal, setShowDetailModal] = useState(false)
 
     // CUSTOM PASSENGER PORTAL & SELF-VERIFICATION STATES
     const [loginMode, setLoginMode] = useState<"officer" | "passenger">("passenger")
@@ -81,32 +113,180 @@ export default function Home() {
         setTerminalLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${log}`])
     }
 
-    const handleLogin = (e: React.FormEvent) => {
+    // Listen to Firebase Auth state changes
+    useEffect(() => {
+        const unsubscribe = auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                // If it is our hardcoded admin email, sign in as officer
+                if (user.email === "admin@sentinelgate.gov") {
+                    setAuthRole("admin")
+                } else {
+                    const profile = await getUserProfile(user.uid)
+                    if (profile) {
+                        setCurrentUserProfile(profile)
+                        setUserPassportStatus(profile)
+                        setUserPassportInput(profile.passport)
+                        setUserPassportQueried(true)
+                        setAuthRole("user")
+                    }
+                }
+            } else {
+                setAuthRole(null)
+                setCurrentUserProfile(null)
+            }
+        })
+        return () => unsubscribe()
+    }, [])
+
+    const handleAuthLogin = async (e: React.FormEvent) => {
         e.preventDefault()
-        // Admin Login
-        if (loginUsername === "CentralBureauInvestigration033" && loginPassword === "IndiaSecurityTopRisk04822") {
+        setLoginError("")
+        
+        // 1. Officer/Admin check using specific email/password
+        if (loginUsername.trim().toLowerCase() === "admin@sentinelgate.gov" && loginPassword === "AdminSecurityTopRisk04822") {
             setAuthRole("admin")
             setLoginError("")
             return
         }
-        
-        // User Login - Assume Username = Name, Password = Passport Number
-        const normalizedNameInput = loginUsername.trim().toLowerCase()
-        const normalizedPassportInput = loginPassword.trim().toUpperCase()
 
-        const foundUser = travelers.find(t => 
-            t.name.trim().toLowerCase() === normalizedNameInput && 
-            t.passport.trim().toUpperCase() === normalizedPassportInput
-        )
+        // 2. Regular user check
+        try {
+            const userCredential = await signInWithEmailAndPassword(auth, loginUsername.trim(), loginPassword)
+            const uid = userCredential.user.uid
+            
+            const profile = await getUserProfile(uid)
+            if (profile) {
+                setCurrentUserProfile(profile)
+                setUserPassportStatus(profile)
+                setUserPassportInput(profile.passport)
+                setUserPassportQueried(true)
+                setAuthRole("user")
+                setLoginError("")
+            } else {
+                setLoginError("Account profile not found in database.")
+                await signOut(auth)
+            }
+        } catch (err: any) {
+            console.error("Login error:", err)
+            setLoginError("Invalid email or password.")
+        }
+    }
 
-        if (foundUser) {
-            setUserPassportInput(foundUser.passport)
-            setUserPassportStatus(foundUser)
+    const handleSignup = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setLoginError("")
+
+        if (!signupEmail || !signupPassword || !signupName || !signupPassport) {
+            setLoginError("Please fill out all required fields.")
+            return
+        }
+
+        try {
+            const userCredential = await createUserWithEmailAndPassword(auth, signupEmail.trim(), signupPassword)
+            const uid = userCredential.user.uid
+
+            const profile = {
+                name: signupName.trim().toUpperCase(),
+                email: signupEmail.trim().toLowerCase(),
+                phone: signupPhone.trim() || "+1 (555) 000-0000",
+                dob: signupDob || "2000-01-01",
+                passport: signupPassport.trim().toUpperCase(),
+                flightNo: signupFlight.trim().toUpperCase() || "SG-101",
+                verified: false,
+                risk: 20
+            }
+
+            await createUserProfile(uid, profile)
+            setCurrentUserProfile(profile)
+            setUserPassportStatus(profile)
+            setUserPassportInput(profile.passport)
             setUserPassportQueried(true)
             setAuthRole("user")
+            setVerifStep("form") // Go to self-verification wizard step
             setLoginError("")
-        } else {
-            setLoginError("Invalid credentials or traveler record not found")
+            alert("Account registered successfully!")
+        } catch (err: any) {
+            console.error("Signup error:", err)
+            setLoginError(err.message || "Failed to create account.")
+        }
+    }
+
+    const handleGoogleLogin = async () => {
+        setLoginError("")
+        const provider = new GoogleAuthProvider()
+        try {
+            const result = await signInWithPopup(auth, provider)
+            const user = result.user
+            const profile = await getUserProfile(user.uid)
+            if (profile) {
+                setCurrentUserProfile(profile)
+                setUserPassportStatus(profile)
+                setUserPassportInput(profile.passport)
+                setUserPassportQueried(true)
+                setAuthRole("user")
+                setLoginError("")
+            } else {
+                const defaultProfile = {
+                    name: user.displayName?.toUpperCase() || "GOOGLE USER",
+                    email: user.email?.toLowerCase() || "",
+                    phone: "+1 (555) 000-0000",
+                    dob: "2000-01-01",
+                    passport: "PENDING",
+                    flightNo: "SG-101",
+                    verified: false,
+                    risk: 20
+                }
+                await createUserProfile(user.uid, defaultProfile)
+                setCurrentUserProfile(defaultProfile)
+                setUserPassportStatus(defaultProfile)
+                setUserPassportInput("PENDING")
+                setUserPassportQueried(true)
+                setAuthRole("user")
+                setLoginError("")
+            }
+        } catch (err: any) {
+            console.error("Google login error:", err)
+            setLoginError("Failed to sign in with Google: " + err.message)
+        }
+    }
+
+    const handleLogout = async () => {
+        await signOut(auth)
+        setAuthRole(null)
+        setCurrentUserProfile(null)
+        setLoginUsername("")
+        setLoginPassword("")
+        setUserPassportInput("")
+        setUserPassportQueried(false)
+        setUserPassportStatus(null)
+        setExtractedData(null)
+        setVerificationPassData(null)
+        setVerifStep("form")
+    }
+
+    const handleTravelerRowClick = async (traveler: any) => {
+        try {
+            const profile = await getUserByPassport(traveler.passport)
+            if (profile) {
+                setSelectedTravelerDetail({
+                    ...traveler,
+                    ...profile,
+                    isRegisteredUser: true
+                })
+            } else {
+                // Return default mock values if not registered
+                setSelectedTravelerDetail({
+                    ...traveler,
+                    email: "unregistered_traveler@sentinelgate.gov",
+                    phone: "+1 (555) 019-2831 (System Fallback)",
+                    dob: "1992-05-14",
+                    flightNo: traveler.note === "HUMANITARIAN_PROCESSING_REQUIRED" ? "UN-011" : "SG-302",
+                    isRegisteredUser: false
+                })
+            }
+            setShowDetailModal(true)
+        } catch (err) {
+            console.error("Error inspecting traveler:", err)
         }
     }
 
@@ -696,6 +876,20 @@ export default function Home() {
         // Save to Firebase Database
         try {
             await addTraveler(newTraveler)
+            
+            // If a passenger user is logged in, mark their profile as verified: true in users collection
+            if (auth.currentUser) {
+                await updateUserProfile(auth.currentUser.uid, {
+                    verified: true,
+                    risk: risk
+                })
+                setCurrentUserProfile(prev => ({
+                    ...prev,
+                    verified: true,
+                    risk: risk
+                }))
+            }
+
             setVerificationPassData(newTraveler)
             setVerifStep("pass")
             addTerminalLog("Verification successfully recorded in secure database.")
@@ -764,7 +958,7 @@ export default function Home() {
                             onClick={() => { setLoginMode("passenger"); setLoginError(""); }}
                             className={`flex-1 pb-3 text-xs font-bold tracking-wider uppercase border-b-2 transition-all ${loginMode === "passenger" ? "border-amber-500 text-amber-400" : "border-transparent text-slate-500 hover:text-slate-400"}`}
                         >
-                            Passenger Verification
+                            Passenger Portal
                         </button>
                         <button
                             onClick={() => { setLoginMode("officer"); setLoginError(""); }}
@@ -774,33 +968,37 @@ export default function Home() {
                         </button>
                     </div>
 
+                    {/* Error display */}
+                    {loginError && (
+                        <div className="bg-rose-500/10 border border-rose-500/50 text-rose-400 p-3 rounded-xl text-xs text-center font-bold mb-4">
+                            {loginError}
+                        </div>
+                    )}
+
                     {/* Content Renderer */}
                     {loginMode === "officer" ? (
                         /* Officer Login Form */
-                        <form onSubmit={handleLogin} className="space-y-4">
-                            {loginError && (
-                                <div className="bg-rose-500/10 border border-rose-500/50 text-rose-400 p-3 rounded-xl text-xs text-center font-bold">
-                                    {loginError}
-                                </div>
-                            )}
+                        <form onSubmit={handleAuthLogin} className="space-y-4">
                             <div>
-                                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Officer Clearance ID</label>
+                                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Officer Email</label>
                                 <input
-                                    type="text"
+                                    type="email"
                                     value={loginUsername}
                                     onChange={(e) => setLoginUsername(e.target.value)}
-                                    className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono text-sm"
-                                    placeholder="Enter access code"
+                                    className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-650 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono text-sm"
+                                    placeholder="officer@sentinelgate.gov"
+                                    required
                                 />
                             </div>
                             <div>
-                                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Secure Passkey</label>
+                                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Passkey</label>
                                 <input
                                     type="password"
                                     value={loginPassword}
                                     onChange={(e) => setLoginPassword(e.target.value)}
-                                    className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono text-sm"
+                                    className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-650 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono text-sm"
                                     placeholder="••••••••••••"
+                                    required
                                 />
                             </div>
                             <button
@@ -812,320 +1010,189 @@ export default function Home() {
                             </button>
                         </form>
                     ) : (
-                        /* Passenger Wizard */
-                        <div className="space-y-5">
-                            {verifStep === "form" && (
-                                <div className="space-y-4">
-                                    {/* Sub-header explaining action */}
-                                    <div className="flex justify-between items-center mb-2">
-                                        <h3 className="text-sm font-bold text-white uppercase tracking-wider">Onboarding Registration</h3>
-                                        <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-mono">STEP 1/3</span>
-                                    </div>
-
-                                    {/* Upload passport zone */}
-                                    <div className="relative border-2 border-dashed border-slate-700/80 hover:border-amber-500/50 rounded-2xl p-6 transition-all bg-slate-950/30 hover:bg-slate-950/60 flex flex-col items-center justify-center text-center group cursor-pointer">
+                        /* Passenger Login/Signup */
+                        <div className="space-y-4">
+                            {authAction === "signin" ? (
+                                <form onSubmit={handleAuthLogin} className="space-y-4">
+                                    <div>
+                                        <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Email Address</label>
                                         <input
-                                            type="file"
-                                            onChange={async (e) => {
-                                                const file = e.target.files?.[0]
-                                                if (file) {
-                                                    setPassportImageName(file.name)
-                                                    setMrzScanning(true)
-                                                    setTerminalLogs([])
-                                                    addTerminalLog("Scanning uploaded document...")
-                                                    addTerminalLog("Connecting OCR engine...")
-                                                    
-                                                    // Fake scanning delay
-                                                    setTimeout(() => {
-                                                        addTerminalLog("Extracting Machine Readable Zone (MRZ)...")
-                                                    }, 500)
-                                                    setTimeout(() => {
-                                                        addTerminalLog("Verifying document digital signatures...")
-                                                    }, 1200)
-                                                    setTimeout(() => {
-                                                        const randomID = "C" + Math.floor(1000000 + Math.random() * 9000000)
-                                                        const mockExtracted = {
-                                                            name: "ALEXANDER WRIGHT",
-                                                            passport: randomID,
-                                                            country: "Canada"
-                                                        }
-                                                        setExtractedData(mockExtracted)
-                                                        setName(mockExtracted.name)
-                                                        setPassport(mockExtracted.passport)
-                                                        setCountry(mockExtracted.country)
-                                                        setMrzScanning(false)
-                                                        setVerifStep("biometric")
-                                                        addTerminalLog("Extraction complete: Passport details parsed.")
-                                                    }, 2200)
-                                                }
-                                            }}
-                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                            type="email"
+                                            value={loginUsername}
+                                            onChange={(e) => setLoginUsername(e.target.value)}
+                                            className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-650 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all font-mono text-sm"
+                                            placeholder="passenger@email.com"
+                                            required
                                         />
-                                        <FiUploadCloud className="w-10 h-10 text-slate-500 group-hover:text-amber-400 mb-2 transition-colors" />
-                                        <span className="text-xs font-bold text-slate-300 group-hover:text-white">Upload Passport Page Image</span>
-                                        <span className="text-[10px] text-slate-500 mt-1">Supports JPEG, PNG up to 10MB</span>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Password</label>
+                                        <input
+                                            type="password"
+                                            value={loginPassword}
+                                            onChange={(e) => setLoginPassword(e.target.value)}
+                                            className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-650 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all font-mono text-sm"
+                                            placeholder="••••••••••••"
+                                            required
+                                        />
                                     </div>
 
-                                    {mrzScanning && (
-                                        <div className="bg-slate-950/80 border border-amber-500/20 p-4 rounded-2xl flex flex-col gap-2 relative overflow-hidden animate-pulse">
-                                            <div className="w-full h-1 bg-amber-500/80 animate-scan-line absolute top-0 left-0"></div>
-                                            <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
-                                                <FiCpu className="animate-spin" />
-                                                <span>Machine Reader Extracting Details...</span>
-                                            </div>
-                                            <div className="bg-black/40 border border-white/5 p-3 rounded-lg font-mono text-[9px] text-slate-400 max-h-24 overflow-y-auto">
-                                                {terminalLogs.map((log, i) => (
-                                                    <div key={i}>{log}</div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
+                                    <button
+                                        type="submit"
+                                        className="w-full mt-2 bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-[0_0_15px_rgba(217,119,6,0.3)] hover:shadow-[0_0_20px_rgba(217,119,6,0.5)] flex items-center justify-center gap-2 uppercase tracking-wider text-xs"
+                                    >
+                                        <FiLock className="w-3.5 h-3.5" />
+                                        Log In to Portal
+                                    </button>
 
                                     <div className="relative flex py-2 items-center">
                                         <div className="flex-grow border-t border-slate-800"></div>
-                                        <span className="flex-shrink mx-4 text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Or Manual Sign In</span>
+                                        <span className="flex-shrink mx-4 text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Or OAuth Access</span>
                                         <div className="flex-grow border-t border-slate-800"></div>
                                     </div>
 
-                                    {/* Manual credentials check */}
-                                    <form onSubmit={(e) => {
-                                        e.preventDefault()
-                                        if (loginUsername && loginPassword) {
-                                            const found = travelers.find(t => 
-                                                t.name.trim().toLowerCase() === loginUsername.trim().toLowerCase() && 
-                                                t.passport.trim().toUpperCase() === loginPassword.trim().toUpperCase()
-                                            )
-                                            if (found) {
-                                                setUserPassportInput(found.passport)
-                                                setUserPassportStatus(found)
-                                                setUserPassportQueried(true)
-                                                setAuthRole("user")
-                                            } else {
-                                                // Create a new traveler manual verification flow
-                                                setName(loginUsername.toUpperCase())
-                                                setPassport(loginPassword.toUpperCase())
-                                                setCountry("India") // default
-                                                setVerifStep("biometric")
-                                            }
-                                        }
-                                    }} className="space-y-3">
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div>
-                                                <label className="block text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-1">Full Legal Name</label>
-                                                <input
-                                                    type="text"
-                                                    value={loginUsername}
-                                                    onChange={(e) => setLoginUsername(e.target.value)}
-                                                    className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-700 focus:outline-none focus:border-amber-500"
-                                                    placeholder="John Doe"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-1">Passport Number</label>
-                                                <input
-                                                    type="text"
-                                                    value={loginPassword}
-                                                    onChange={(e) => setLoginPassword(e.target.value)}
-                                                    className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white uppercase font-mono placeholder-slate-700 focus:outline-none focus:border-amber-500"
-                                                    placeholder="C1234567"
-                                                />
-                                            </div>
-                                        </div>
-                                        <button
-                                            type="submit"
-                                            disabled={!loginUsername || !loginPassword}
-                                            className="w-full bg-slate-800 hover:bg-slate-750 disabled:bg-slate-900 disabled:text-slate-700 text-slate-200 py-2.5 rounded-xl text-xs font-bold transition-all border border-slate-700 hover:border-slate-600"
-                                        >
-                                            Lookup Status or Register
-                                        </button>
-                                    </form>
-                                </div>
-                            )}
-
-                            {verifStep === "biometric" && (
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <div>
-                                            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Webcam Identity Audit</h3>
-                                            <p className="text-[10px] text-slate-500 font-mono">Passport Record: {name || extractedData?.name} ({passport || extractedData?.passport})</p>
-                                        </div>
-                                        <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-mono">STEP 2/3</span>
-                                    </div>
-
-                                    {/* Passenger Webcam Viewer */}
-                                    <div className="relative w-full h-56 bg-black rounded-2xl overflow-hidden shadow-inner border border-slate-800 flex items-center justify-center">
-                                        <Webcam
-                                            ref={passengerWebcamRef}
-                                            audio={false}
-                                            screenshotFormat="image/jpeg"
-                                            videoConstraints={{ facingMode: "user" }}
-                                            className="object-cover w-full h-full opacity-80"
-                                        />
-
-                                        {/* Overlay graphics */}
-                                        <div className="absolute inset-0 border-2 border-amber-500/20 m-6 rounded-xl pointer-events-none">
-                                            <div className="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-amber-400 rounded-tl"></div>
-                                            <div className="absolute -top-1 -right-1 w-4 h-4 border-t-2 border-r-2 border-amber-400 rounded-tr"></div>
-                                            <div className="absolute -bottom-1 -left-1 w-4 h-4 border-b-2 border-l-2 border-amber-400 rounded-bl"></div>
-                                            <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-amber-400 rounded-br"></div>
-                                        </div>
-
-                                        {selfieScanning && (
-                                            <div className="absolute inset-0 bg-slate-950/60 flex flex-col items-center justify-center backdrop-blur-[1px]">
-                                                <div className="w-full h-0.5 bg-amber-400 animate-scan-line shadow-[0_0_10px_rgba(245,158,11,0.8)] absolute top-0 left-0"></div>
-                                                <FiAperture className="w-8 h-8 text-white animate-spin mb-2" />
-                                                <p className="text-white font-mono text-[10px] tracking-widest uppercase">Matching biometric node structure...</p>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Scan Action */}
                                     <button
-                                        onClick={async () => {
-                                            if (!modelsLoaded) {
-                                                alert("Facial recognition model database is initializing. Standby 3 seconds...")
-                                                return
-                                            }
-
-                                            const imageSrc = passengerWebcamRef.current?.getScreenshot()
-                                            if (!imageSrc) {
-                                                alert("Webcam is not ready.")
-                                                return
-                                            }
-
-                                            setSelfieScanning(true)
-                                            addTerminalLog("Scanning facial markers...")
-                                            addTerminalLog("Running Watchlist databases lookup...")
-
-                                            setTimeout(async () => {
-                                                try {
-                                                    const img = new window.Image()
-                                                    img.src = imageSrc
-                                                    img.onload = async () => {
-                                                        const faceapi = faceapiRef.current
-                                                        if (!faceapi) {
-                                                            finalizePassengerVerification(null, 1.0)
-                                                            return
-                                                        }
-                                                        const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor()
-                                                        let distance = 1.0
-                                                        let matchPerson = null
-                                                        if (detection && trumpDescriptor) {
-                                                            distance = faceapi.euclideanDistance(detection.descriptor, trumpDescriptor)
-                                                            if (distance < 0.55) {
-                                                                matchPerson = WATCHLIST.find(w => w.name === "donald trump")
-                                                            }
-                                                        }
-                                                        finalizePassengerVerification(matchPerson, distance)
-                                                    }
-                                                } catch (err) {
-                                                    console.error("Biometric match failed:", err)
-                                                    finalizePassengerVerification(null, 1.0)
-                                                }
-                                            }, 2000)
-                                        }}
-                                        disabled={selfieScanning}
-                                        className="w-full bg-amber-600 hover:bg-amber-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold py-3 rounded-xl transition-all shadow-[0_0_15px_rgba(217,119,6,0.3)] flex items-center justify-center gap-2 uppercase tracking-wider text-xs"
+                                        type="button"
+                                        onClick={handleGoogleLogin}
+                                        className="w-full bg-slate-950/80 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-200 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 uppercase tracking-wider"
                                     >
-                                        <FiUserCheck className="w-4 h-4" />
-                                        {selfieScanning ? "Matching Face Biometrics..." : "Perform Face Identity Audit"}
+                                        <svg className="w-4 h-4" viewBox="0 0 24 24">
+                                            <path
+                                                fill="currentColor"
+                                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                                            />
+                                            <path
+                                                fill="currentColor"
+                                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                                            />
+                                            <path
+                                                fill="currentColor"
+                                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                                            />
+                                            <path
+                                                fill="currentColor"
+                                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                                            />
+                                        </svg>
+                                        Sign In with Google
                                     </button>
-                                </div>
-                            )}
 
-                            {verifStep === "pass" && verificationPassData && (
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center mb-1">
-                                        <h3 className="text-sm font-bold text-white uppercase tracking-wider">Verification Certificate</h3>
-                                        <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-mono">STEP 3/3</span>
-                                    </div>
-
-                                    {/* Secure Pass UI */}
-                                    <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 relative overflow-hidden">
-                                        {/* Watermark Crest */}
-                                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-5 pointer-events-none">
-                                            <FiShield className="w-56 h-56 text-slate-400" />
-                                        </div>
-
-                                        {/* Top branding */}
-                                        <div className="flex justify-between items-center border-b border-slate-900 pb-3 mb-4">
-                                            <div className="text-[9px] text-slate-400 font-mono tracking-widest">
-                                                ID: SG-{verificationPassData.passport.substring(0,4)}-{Math.floor(1000 + Math.random()*9000)}
-                                            </div>
-                                            <div className="text-[9px] text-amber-500 font-bold tracking-wider uppercase">
-                                                SECURE DIGITAL PASS
-                                            </div>
-                                        </div>
-
-                                        {/* Status Header */}
-                                        <div className="text-center mb-5">
-                                            <span className={`inline-block px-5 py-2 rounded-full text-xs font-black tracking-widest uppercase border ${verificationPassData.risk >= 70 ? 'bg-rose-950/40 text-rose-400 border-rose-500/30' : verificationPassData.risk >= 40 ? 'bg-amber-950/40 text-amber-400 border-amber-500/30' : 'bg-emerald-950/40 text-emerald-400 border-emerald-500/30'}`}>
-                                                {getStatus(verificationPassData.risk)}
-                                            </span>
-                                        </div>
-
-                                        {/* Details Grid */}
-                                        <div className="grid grid-cols-2 gap-3 text-xs mb-5 font-mono">
-                                            <div className="bg-slate-900/60 p-2 rounded border border-white/5">
-                                                <span className="text-[9px] text-slate-500 uppercase block">Name</span>
-                                                <span className="font-bold text-white uppercase">{verificationPassData.name}</span>
-                                            </div>
-                                            <div className="bg-slate-900/60 p-2 rounded border border-white/5">
-                                                <span className="text-[9px] text-slate-500 uppercase block">Passport ID</span>
-                                                <span className="font-bold text-white">{verificationPassData.passport}</span>
-                                            </div>
-                                            <div className="bg-slate-900/60 p-2 rounded border border-white/5">
-                                                <span className="text-[9px] text-slate-500 uppercase block">Origin</span>
-                                                <span className="font-bold text-white uppercase">{verificationPassData.country}</span>
-                                            </div>
-                                            <div className="bg-slate-900/60 p-2 rounded border border-white/5">
-                                                <span className="text-[9px] text-slate-500 uppercase block">Security Risk</span>
-                                                <span className="font-bold text-white">{verificationPassData.risk}%</span>
-                                            </div>
-                                        </div>
-
-                                        {/* Signature */}
-                                        <div className="border-t border-slate-900 pt-3 flex items-center justify-between text-[8px] font-mono text-slate-500 leading-tight">
-                                            <div>
-                                                <div>SIGNATURE HASH:</div>
-                                                <div className="text-slate-400 break-all w-48 text-[7px]">
-                                                    {blockchain.calculateHash(verificationPassData.risk, new Date().toISOString(), "PREV_VERIFICATION_HASH", verificationPassData)}
-                                                </div>
-                                            </div>
-                                            {/* Visual QR Code Mock */}
-                                            <div className="w-10 h-10 bg-white p-1 rounded">
-                                                <div className="w-full h-full bg-[linear-gradient(45deg,#000_25%,transparent_25%),linear-gradient(-45deg,#000_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#000_75%),linear-gradient(-45deg,transparent_75%,#000_75%)] bg-[size:4px_4px] bg-slate-950"></div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Action Buttons */}
-                                    <div className="flex gap-3">
+                                    <div className="text-center mt-4">
                                         <button
-                                            onClick={() => {
-                                                alert("Travel Pass printed successfully to System Spooler.")
-                                            }}
-                                            className="flex-1 bg-slate-800 hover:bg-slate-750 text-slate-200 py-2.5 rounded-xl text-xs font-bold transition-all border border-slate-700 flex items-center justify-center gap-1.5"
+                                            type="button"
+                                            onClick={() => { setAuthAction("signup"); setLoginError(""); }}
+                                            className="text-xs text-amber-500 hover:text-amber-400 font-semibold"
                                         >
-                                            <FiPrinter className="w-3.5 h-3.5" />
-                                            Print Pass
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                // Reset passenger flow
-                                                setVerifStep("form");
-                                                setVerificationPassData(null);
-                                                setLoginUsername("");
-                                                setLoginPassword("");
-                                                setExtractedData(null);
-                                                setPassportImage(null);
-                                            }}
-                                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-bold transition-all shadow-[0_0_10px_rgba(16,185,129,0.2)] flex items-center justify-center"
-                                        >
-                                            Complete Portal Verification
+                                            Don't have a passenger account? Create one here
                                         </button>
                                     </div>
-                                </div>
+                                </form>
+                            ) : (
+                                <form onSubmit={handleSignup} className="space-y-3.5">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Full Legal Name</label>
+                                            <input
+                                                type="text"
+                                                value={signupName}
+                                                onChange={(e) => setSignupName(e.target.value)}
+                                                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-700 focus:outline-none focus:border-amber-500"
+                                                placeholder="JOHN DOE"
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Phone Number</label>
+                                            <input
+                                                type="text"
+                                                value={signupPhone}
+                                                onChange={(e) => setSignupPhone(e.target.value)}
+                                                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-700 focus:outline-none focus:border-amber-500"
+                                                placeholder="+1 (555) 012-3456"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Date of Birth</label>
+                                            <input
+                                                type="date"
+                                                value={signupDob}
+                                                onChange={(e) => setSignupDob(e.target.value)}
+                                                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-700 focus:outline-none focus:border-amber-500"
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Passport Number</label>
+                                            <input
+                                                type="text"
+                                                value={signupPassport}
+                                                onChange={(e) => setSignupPassport(e.target.value)}
+                                                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-white uppercase font-mono placeholder-slate-700 focus:outline-none focus:border-amber-500"
+                                                placeholder="L1234567"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Flight Number</label>
+                                            <input
+                                                type="text"
+                                                value={signupFlight}
+                                                onChange={(e) => setSignupFlight(e.target.value)}
+                                                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-white uppercase font-mono placeholder-slate-700 focus:outline-none focus:border-amber-500"
+                                                placeholder="SG-302"
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Email Address</label>
+                                            <input
+                                                type="email"
+                                                value={signupEmail}
+                                                onChange={(e) => setSignupEmail(e.target.value)}
+                                                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-700 focus:outline-none focus:border-amber-500"
+                                                placeholder="name@email.com"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Password</label>
+                                        <input
+                                            type="password"
+                                            value={signupPassword}
+                                            onChange={(e) => setSignupPassword(e.target.value)}
+                                            className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-700 focus:outline-none focus:border-amber-500"
+                                            placeholder="Min. 6 characters"
+                                            required
+                                        />
+                                    </div>
+
+                                    <button
+                                        type="submit"
+                                        className="w-full mt-2 bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-xl transition-all shadow-[0_0_15px_rgba(217,119,6,0.3)] flex items-center justify-center gap-2 uppercase tracking-wider text-xs"
+                                    >
+                                        <FiUserPlus className="w-4 h-4" />
+                                        Register Account
+                                    </button>
+
+                                    <div className="text-center mt-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => { setAuthAction("signin"); setLoginError(""); }}
+                                            className="text-xs text-amber-500 hover:text-amber-400 font-semibold"
+                                        >
+                                            Already have an account? Sign In here
+                                        </button>
+                                    </div>
+                                </form>
                             )}
                         </div>
                     )}
@@ -1135,83 +1202,433 @@ export default function Home() {
     }
 
     if (authRole === "user") {
+        const isVerified = currentUserProfile?.verified || userPassportStatus?.verified || verificationPassData?.verified;
+        const currentRisk = currentUserProfile?.risk ?? 20;
+        const finalStatus = getStatus(currentRisk);
+
         return (
-            <div className="min-h-screen text-slate-200 flex flex-col items-center justify-center p-4 bg-slate-950 font-sans relative overflow-x-hidden">
+            <div className="min-h-screen text-slate-200 p-4 md:p-8 bg-slate-950 font-sans relative overflow-x-hidden">
+                {/* Background animations */}
                 <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] pointer-events-none"></div>
-                <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-                
-                <div className="mb-6 text-center bg-slate-900/60 backdrop-blur-md border border-slate-800 p-6 rounded-2xl shadow-xl z-10 w-full max-w-md">
-                    <div className="flex items-center justify-center gap-2 mb-2">
-                        <svg className="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                        </svg>
-                        <h1 className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-blue-400 uppercase tracking-widest">Passenger Border Pass</h1>
-                    </div>
-                    <p className="text-slate-400 text-xs font-mono">AUTHORIZED VERIFICATION RECORD</p>
-                </div>
+                <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+                <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
 
-                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl max-w-md w-full relative z-10 overflow-hidden">
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-500"></div>
-                    <div className="mb-6 flex items-center justify-between">
-                        <h2 className="text-sm font-black text-white uppercase tracking-wider">Assessment Status</h2>
-                        <span className="text-[10px] text-slate-500 font-mono">VERIFIED ACTIVE</span>
+                {/* HEADER */}
+                <header className="flex flex-col md:flex-row items-center justify-between mb-8 p-6 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl relative z-10">
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-center p-2.5 bg-gradient-to-br from-emerald-500 to-blue-500 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] border border-white/10">
+                            <FiShield className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-blue-400">
+                                PASSENGER PORTAL
+                            </h1>
+                            <p className="text-[10px] text-slate-500 tracking-[0.2em] font-black uppercase mt-0.5">
+                                Secure Digital Identity & Border Clearance
+                            </p>
+                        </div>
                     </div>
 
-                    {userPassportStatus ? (
-                        <div className="space-y-4">
-                            <div className={`p-4 rounded-xl border text-center ${userPassportStatus.risk >= 70 ? 'bg-rose-950/40 border-rose-500/30' : userPassportStatus.risk >= 40 ? 'bg-amber-950/40 border-amber-500/30' : 'bg-emerald-950/40 border-emerald-500/30'}`}>
-                                <span className={`inline-block px-4 py-1.5 rounded-full text-xs font-black tracking-wide ${getColorClass(userPassportStatus.risk, userPassportStatus.note === "HUMANITARIAN_PROCESSING_REQUIRED")}`}>
-                                    {getStatus(userPassportStatus.risk, userPassportStatus.note === "HUMANITARIAN_PROCESSING_REQUIRED")}
-                                </span>
+                    <div className="flex items-center gap-3 mt-4 md:mt-0">
+                        <div className="text-right font-mono text-xs hidden sm:block">
+                            <div className="text-slate-400">Passenger Account</div>
+                            <div className="text-emerald-400 font-bold">{currentUserProfile?.email}</div>
+                        </div>
+                        <button
+                            onClick={handleLogout}
+                            className="bg-rose-500/10 hover:bg-rose-500/25 border border-rose-500/30 hover:border-rose-500/50 text-rose-400 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 uppercase tracking-wider"
+                        >
+                            <FiUserX className="w-4 h-4" /> Sign Out
+                        </button>
+                    </div>
+                </header>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 relative z-10">
+                    {/* LEFT COLUMN: IDENTITY VERIFICATION & PASS */}
+                    <div className="lg:col-span-2 space-y-8">
+                        {/* 1. DIGITAL TRAVEL PASS OR VERIFICATION CARD */}
+                        {isVerified ? (
+                            <div className="bg-slate-900/80 backdrop-blur-md border-2 border-amber-500/40 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+                                {/* Watermark */}
+                                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-5 pointer-events-none">
+                                    <FiShield className="w-80 h-80 text-amber-500" />
+                                </div>
+                                <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-500"></div>
+
+                                <div className="flex justify-between items-center border-b border-slate-800 pb-4 mb-6">
+                                    <div>
+                                        <h2 className="text-lg font-black text-amber-400 uppercase tracking-widest">Border Intelligence Travel Pass</h2>
+                                        <p className="text-[10px] text-slate-500 font-mono mt-0.5">FEDERAL IMMIGRATION COMPLIANCE STATUS</p>
+                                    </div>
+                                    <span className="text-[10px] px-3 py-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono font-bold tracking-widest uppercase">
+                                        SECURE PASS
+                                    </span>
+                                </div>
+
+                                <div className="flex flex-col md:flex-row gap-8 items-center">
+                                    {/* Verification Stamp */}
+                                    <div className="flex flex-col items-center justify-center p-6 bg-slate-950/60 border border-slate-800 rounded-2xl w-48 text-center shrink-0">
+                                        <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-center mb-4">
+                                            <FiCheckCircle className="w-8 h-8 text-emerald-400" />
+                                        </div>
+                                        <span className="text-xs font-black uppercase text-slate-400 tracking-wider">Clearance Status</span>
+                                        <span className="text-emerald-400 font-black text-sm uppercase tracking-widest mt-1 block">
+                                            {finalStatus}
+                                        </span>
+                                    </div>
+
+                                    {/* Pass details */}
+                                    <div className="flex-1 w-full space-y-4">
+                                        <div className="grid grid-cols-2 gap-4 text-xs font-mono">
+                                            <div className="bg-slate-950/50 p-3 rounded-xl border border-white/5">
+                                                <span className="text-[9px] text-slate-500 uppercase block mb-0.5">Legal Name</span>
+                                                <span className="font-bold text-white uppercase text-sm">{currentUserProfile?.name}</span>
+                                            </div>
+                                            <div className="bg-slate-950/50 p-3 rounded-xl border border-white/5">
+                                                <span className="text-[9px] text-slate-500 uppercase block mb-0.5">Passport ID</span>
+                                                <span className="font-bold text-white text-sm">{currentUserProfile?.passport}</span>
+                                            </div>
+                                            <div className="bg-slate-950/50 p-3 rounded-xl border border-white/5">
+                                                <span className="text-[9px] text-slate-500 uppercase block mb-0.5">Flight Code</span>
+                                                <span className="font-bold text-white text-sm">{currentUserProfile?.flightNo}</span>
+                                            </div>
+                                            <div className="bg-slate-950/50 p-3 rounded-xl border border-white/5">
+                                                <span className="text-[9px] text-slate-500 uppercase block mb-0.5">Risk Score</span>
+                                                <span className="font-bold text-white text-sm">{currentRisk}%</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="border-t border-slate-800 pt-4 flex items-center justify-between">
+                                            <div className="text-[9px] font-mono text-slate-500 leading-normal max-w-[70%]">
+                                                <div>IMMUTABLE LEDGER HASH:</div>
+                                                <div className="text-slate-400 break-all">
+                                                    {blockchain.calculateHash(currentRisk, new Date().toISOString(), "PREV_PASS_VERIFICATION_HASH", currentUserProfile)}
+                                                </div>
+                                            </div>
+                                            {/* QR MOCK */}
+                                            <div className="w-14 h-14 bg-white p-1 rounded shrink-0 border border-slate-700">
+                                                <div className="w-full h-full bg-[linear-gradient(45deg,#000_25%,transparent_25%),linear-gradient(-45deg,#000_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#000_75%),linear-gradient(-45deg,transparent_75%,#000_75%)] bg-[size:4px_4px] bg-slate-950"></div>
+                                            </div>
+                                        </div>
+
+                                        <div className="pt-2 flex gap-3">
+                                            <button
+                                                onClick={() => alert("Digital travel pass printed to systems spooler.")}
+                                                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 py-2.5 rounded-xl text-xs font-bold transition-all border border-slate-700 flex items-center justify-center gap-1.5"
+                                            >
+                                                <FiPrinter className="w-3.5 h-3.5" /> Print Travel Pass
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="space-y-2 text-xs font-mono">
-                                <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-white/5">
-                                    <span className="text-slate-500 font-medium">FULL LEGAL NAME</span>
-                                    <span className="text-white font-bold uppercase">{userPassportStatus.name}</span>
-                                </div>
-                                <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-white/5">
-                                    <span className="text-slate-500 font-medium">PASSPORT ID</span>
-                                    <span className="text-white font-bold">{userPassportStatus.passport}</span>
-                                </div>
-                                <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-white/5">
-                                    <span className="text-slate-500 font-medium">ORIGIN NATION</span>
-                                    <span className="text-white font-bold uppercase">{userPassportStatus.country}</span>
-                                </div>
-                                <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-white/5">
-                                    <span className="text-slate-500 font-medium">BORDER COMPLIANCE RISK</span>
-                                    <span className="text-white font-bold">{userPassportStatus.risk}%</span>
-                                </div>
-                                {userPassportStatus.note && (
-                                    <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800 text-[10px] text-slate-400 mt-2">
-                                        <span className="text-[8px] text-slate-600 block uppercase mb-1 font-bold">SYSTEM OFFICER NOTES:</span>
-                                        {userPassportStatus.note}
+                        ) : (
+                            /* VERIFICATION FLOW WIZARD */
+                            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative">
+                                <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500"></div>
+
+                                {verifStep === "form" && (
+                                    <div className="space-y-6">
+                                        <div>
+                                            <h2 className="text-xl font-bold text-white uppercase tracking-wider">Digital Selfie & Passport Verification</h2>
+                                            <p className="text-xs text-slate-400 mt-1">Complete your secure border audit dynamically in the web portal to bypass manual queue lines.</p>
+                                        </div>
+
+                                        <div className="flex justify-between items-center bg-slate-950/60 p-4 border border-slate-800 rounded-2xl">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20 text-amber-400">
+                                                    <FiFileText className="w-6 h-6" />
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs font-bold text-white uppercase">Passport Document Verification</div>
+                                                    <div className="text-[10px] text-slate-500">Upload your passport photo page image for scanning and OCR parsing.</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Upload passport zone */}
+                                        <div className="relative border-2 border-dashed border-slate-850 hover:border-amber-500/40 rounded-2xl p-8 transition-all bg-slate-950/40 hover:bg-slate-950/70 flex flex-col items-center justify-center text-center group cursor-pointer">
+                                            <input
+                                                type="file"
+                                                onChange={async (e) => {
+                                                    const file = e.target.files?.[0]
+                                                    if (file) {
+                                                        setPassportImageName(file.name)
+                                                        setMrzScanning(true)
+                                                        setTerminalLogs([])
+                                                        addTerminalLog("Scanning uploaded document...")
+                                                        addTerminalLog("Connecting OCR engine...")
+                                                        
+                                                        // Fake scanning delay
+                                                        setTimeout(() => {
+                                                            addTerminalLog("Extracting Machine Readable Zone (MRZ)...")
+                                                        }, 500)
+                                                        setTimeout(() => {
+                                                            addTerminalLog("Verifying document signatures...")
+                                                        }, 1200)
+                                                        setTimeout(() => {
+                                                            const mockExtracted = {
+                                                                name: currentUserProfile?.name || "ALEXANDER WRIGHT",
+                                                                passport: currentUserProfile?.passport || "P1038291",
+                                                                country: "Canada"
+                                                            }
+                                                            setExtractedData(mockExtracted)
+                                                            setName(mockExtracted.name)
+                                                            setPassport(mockExtracted.passport)
+                                                            setCountry(mockExtracted.country)
+                                                            setMrzScanning(false)
+                                                            setVerifStep("biometric")
+                                                            addTerminalLog("Extraction complete: Passport details parsed.")
+                                                        }, 2200)
+                                                    }
+                                                }}
+                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                            />
+                                            <FiUploadCloud className="w-12 h-12 text-slate-500 group-hover:text-amber-400 mb-2 transition-colors" />
+                                            <span className="text-xs font-bold text-slate-300 group-hover:text-white">Upload Passport Photo Page</span>
+                                            <span className="text-[10px] text-slate-500 mt-1">Accepts JPEG, PNG up to 10MB</span>
+                                        </div>
+
+                                        <div className="text-center font-mono">
+                                            <span className="text-slate-500 text-[10px] uppercase">OR SKIP AND VERIFY DIRECTLY WITH REGISTERED PASSPORT ID</span>
+                                            <button
+                                                onClick={() => {
+                                                    setVerifStep("biometric")
+                                                    setName(currentUserProfile?.name || "")
+                                                    setPassport(currentUserProfile?.passport || "")
+                                                    setCountry("Canada")
+                                                }}
+                                                className="block mx-auto mt-2 text-xs text-amber-500 hover:text-amber-400 font-bold border border-amber-500/30 px-4 py-2 rounded-xl bg-amber-500/5 hover:bg-amber-500/10"
+                                            >
+                                                Proceed with Passport {currentUserProfile?.passport}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {verifStep === "biometric" && (
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <div>
+                                                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Webcam Liveness Selfie Scan</h3>
+                                                <p className="text-[10px] text-slate-500 font-mono">Passport Reference: {passport || currentUserProfile?.passport}</p>
+                                            </div>
+                                            <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-mono">STEP 2/2</span>
+                                        </div>
+
+                                        {/* Passenger Webcam Viewer */}
+                                        <div className="relative w-full h-64 bg-black rounded-2xl overflow-hidden shadow-inner border border-slate-800 flex items-center justify-center">
+                                            <Webcam
+                                                ref={passengerWebcamRef}
+                                                audio={false}
+                                                screenshotFormat="image/jpeg"
+                                                videoConstraints={{ facingMode: "user" }}
+                                                className="object-cover w-full h-full opacity-80"
+                                            />
+
+                                            {/* Overlay graphics */}
+                                            <div className="absolute inset-0 border-2 border-amber-500/20 m-6 rounded-xl pointer-events-none">
+                                                <div className="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-amber-400 rounded-tl"></div>
+                                                <div className="absolute -top-1 -right-1 w-4 h-4 border-t-2 border-r-2 border-amber-400 rounded-tr"></div>
+                                                <div className="absolute -bottom-1 -left-1 w-4 h-4 border-b-2 border-l-2 border-amber-400 rounded-bl"></div>
+                                                <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-amber-400 rounded-br"></div>
+                                            </div>
+
+                                            {selfieScanning && (
+                                                <div className="absolute inset-0 bg-slate-950/60 flex flex-col items-center justify-center backdrop-blur-[1px]">
+                                                    <div className="w-full h-0.5 bg-amber-400 animate-scan-line shadow-[0_0_10px_rgba(245,158,11,0.8)] absolute top-0 left-0"></div>
+                                                    <FiAperture className="w-8 h-8 text-white animate-spin mb-2" />
+                                                    <p className="text-white font-mono text-[10px] tracking-widest uppercase">Matching biometric node structure...</p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <button
+                                            onClick={async () => {
+                                                if (!modelsLoaded) {
+                                                    alert("Facial recognition model database is initializing. Standby 3 seconds...")
+                                                    return
+                                                }
+
+                                                const imageSrc = passengerWebcamRef.current?.getScreenshot()
+                                                if (!imageSrc) {
+                                                    alert("Webcam is not ready.")
+                                                    return
+                                                }
+
+                                                setSelfieScanning(true)
+                                                addTerminalLog("Scanning facial markers...")
+                                                addTerminalLog("Running Watchlist databases lookup...")
+
+                                                setTimeout(async () => {
+                                                    try {
+                                                        const img = new window.Image()
+                                                        img.src = imageSrc
+                                                        img.onload = async () => {
+                                                            const faceapi = faceapiRef.current
+                                                            if (!faceapi) {
+                                                                finalizePassengerVerification(null, 1.0)
+                                                                return
+                                                            }
+                                                            const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor()
+                                                            let distance = 1.0
+                                                            let matchPerson = null
+                                                            if (detection && trumpDescriptor) {
+                                                                distance = faceapi.euclideanDistance(detection.descriptor, trumpDescriptor)
+                                                                if (distance < 0.55) {
+                                                                    matchPerson = WATCHLIST.find(w => w.name === "donald trump")
+                                                                }
+                                                            }
+                                                            finalizePassengerVerification(matchPerson, distance)
+                                                        }
+                                                    } catch (err) {
+                                                        console.error("Biometric match failed:", err)
+                                                        finalizePassengerVerification(null, 1.0)
+                                                    }
+                                                }, 2000)
+                                            }}
+                                            disabled={selfieScanning}
+                                            className="w-full bg-amber-600 hover:bg-amber-500 disabled:bg-slate-800 disabled:text-slate-650 text-white font-bold py-3 rounded-xl transition-all shadow-[0_0_15px_rgba(217,119,6,0.3)] flex items-center justify-center gap-2 uppercase tracking-wider text-xs"
+                                        >
+                                            <FiUserCheck className="w-4 h-4" />
+                                            {selfieScanning ? "Matching Face Biometrics..." : "Perform Face Identity Audit"}
+                                        </button>
                                     </div>
                                 )}
                             </div>
+                        )}
+
+                        {/* 2. FLIGHT DETAILS CARD */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-2 h-full bg-blue-500"></div>
+                            <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
+                                <h3 className="text-md font-bold text-white uppercase tracking-wider">Flight Operations Status</h3>
+                                <span className="text-[9px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded font-mono font-bold tracking-wider">
+                                    ON TIME
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-mono">
+                                <div>
+                                    <span className="text-[9px] text-slate-500 block uppercase mb-1">Flight Number</span>
+                                    <span className="font-bold text-white text-sm">{currentUserProfile?.flightNo || "SG-101"}</span>
+                                </div>
+                                <div>
+                                    <span className="text-[9px] text-slate-500 block uppercase mb-1">Departure</span>
+                                    <span className="font-bold text-white text-sm">New Delhi (DEL)</span>
+                                </div>
+                                <div>
+                                    <span className="text-[9px] text-slate-500 block uppercase mb-1">Arrival HQ</span>
+                                    <span className="font-bold text-white text-sm">Immigration HQ</span>
+                                </div>
+                                <div>
+                                    <span className="text-[9px] text-slate-500 block uppercase mb-1">Boarding Gate</span>
+                                    <span className="font-bold text-amber-400 text-sm">Gate B12</span>
+                                </div>
+                            </div>
                         </div>
-                    ) : (
-                        <div className="text-center p-6 bg-slate-950/50 border border-slate-800 rounded-2xl">
-                            <FiAlertOctagon className="w-8 h-8 text-rose-500 mx-auto mb-3 opacity-80 animate-pulse" />
-                            <p className="text-slate-300 font-medium">Record Verification Pending.</p>
-                            <p className="text-slate-500 text-xs mt-1">Please verify your passport document at the self-verification terminal.</p>
+                    </div>
+
+                    {/* RIGHT COLUMN: USER PROFILE DETAILS & FORM */}
+                    <div className="space-y-8">
+                        {/* PROFILE CARD */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative">
+                            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-blue-500"></div>
+                            <div className="flex items-center gap-3 mb-6 border-b border-slate-800 pb-4">
+                                <FiUserCheck className="w-5 h-5 text-emerald-400" />
+                                <h3 className="text-md font-bold text-white uppercase tracking-wider">Personal Identity Dossier</h3>
+                            </div>
+
+                            <div className="space-y-3.5 text-xs font-mono">
+                                <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-slate-800">
+                                    <span className="text-slate-500">FULL LEGAL NAME</span>
+                                    <span className="text-white font-bold uppercase">{currentUserProfile?.name}</span>
+                                </div>
+                                <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-slate-800">
+                                    <span className="text-slate-500">PASSPORT ID</span>
+                                    <span className="text-white font-bold">{currentUserProfile?.passport}</span>
+                                </div>
+                                <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-slate-800">
+                                    <span className="text-slate-500">EMAIL ADDRESS</span>
+                                    <span className="text-white font-bold">{currentUserProfile?.email}</span>
+                                </div>
+                                <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-slate-800">
+                                    <span className="text-slate-500">PHONE NUMBER</span>
+                                    <span className="text-white font-bold">{currentUserProfile?.phone}</span>
+                                </div>
+                                <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-slate-800">
+                                    <span className="text-slate-500">DATE OF BIRTH</span>
+                                    <span className="text-white font-bold">{currentUserProfile?.dob}</span>
+                                </div>
+                                <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-slate-800">
+                                    <span className="text-slate-500">BIOMETRIC SECURITY SCORE</span>
+                                    <span className="text-amber-400 font-bold">{currentRisk}% Risk</span>
+                                </div>
+                            </div>
                         </div>
-                    )}
+
+                        {/* QUICK PROFILE UPDATE */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
+                            <div className="flex items-center gap-3 mb-4 border-b border-slate-800 pb-3">
+                                <FiActivity className="w-5 h-5 text-blue-400" />
+                                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Update Details</h3>
+                            </div>
+                            <form
+                                onSubmit={async (e) => {
+                                    e.preventDefault();
+                                    const form = e.currentTarget;
+                                    const phone = (form.elements.namedItem("phone") as HTMLInputElement).value;
+                                    const flight = (form.elements.namedItem("flightNo") as HTMLInputElement).value;
+                                    try {
+                                        if (auth.currentUser) {
+                                            const updatedData = {
+                                                phone: phone || currentUserProfile.phone,
+                                                flightNo: flight || currentUserProfile.flightNo
+                                            };
+                                            await updateUserProfile(auth.currentUser.uid, updatedData);
+                                            setCurrentUserProfile((prev: any) => ({
+                                                ...prev,
+                                                ...updatedData
+                                            }));
+                                            alert("Identity dossier updated successfully!");
+                                        }
+                                    } catch (err: any) {
+                                        console.error("Update error:", err);
+                                        alert("Failed to update profile: " + err.message);
+                                    }
+                                }}
+                                className="space-y-4"
+                            >
+                                <div>
+                                    <label className="block text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5">New Contact Phone</label>
+                                    <input
+                                        type="text"
+                                        name="phone"
+                                        defaultValue={currentUserProfile?.phone}
+                                        className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-700 focus:outline-none focus:border-blue-500"
+                                        placeholder="+1 (555) 012-3456"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5">New Flight Connection</label>
+                                    <input
+                                        type="text"
+                                        name="flightNo"
+                                        defaultValue={currentUserProfile?.flightNo}
+                                        className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white uppercase font-mono placeholder-slate-700 focus:outline-none focus:border-blue-500"
+                                        placeholder="SG-302"
+                                    />
+                                </div>
+                                <button
+                                    type="submit"
+                                    className="w-full bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-750 font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition-colors"
+                                >
+                                    Push Dossier Update
+                                </button>
+                            </form>
+                        </div>
+                    </div>
                 </div>
-                
-                <button 
-                    onClick={() => {
-                        setAuthRole(null)
-                        setLoginUsername("")
-                        setLoginPassword("")
-                        setUserPassportInput("")
-                        setUserPassportQueried(false)
-                        setUserPassportStatus(null)
-                    }}
-                    className="mt-8 bg-slate-900 border border-slate-800 hover:bg-slate-850 px-4 py-2 rounded-xl text-slate-400 hover:text-white transition-colors z-10 text-xs font-bold uppercase tracking-wider flex items-center gap-2"
-                    title="Sign Out"
-                >
-                    <FiUserX className="w-4 h-4 text-rose-400" /> Close Portal
-                </button>
             </div>
         )
     }
@@ -1446,7 +1863,12 @@ export default function Home() {
                                         const status = getStatus(t.risk, isHumanitarian)
                                         const isThreat = t.risk >= 70
                                         return (
-                                            <tr key={i} className={`transition-colors group ${isThreat ? 'animate-siren bg-rose-950/20' : isHumanitarian ? 'bg-purple-950/20' : 'hover:bg-white/5'}`}>
+                                            <tr 
+                                                key={i} 
+                                                onClick={() => handleTravelerRowClick(t)}
+                                                className={`transition-colors group cursor-pointer ${isThreat ? 'animate-siren bg-rose-950/20 hover:bg-rose-950/30' : isHumanitarian ? 'bg-purple-950/20 hover:bg-purple-950/30' : 'hover:bg-white/5'}`}
+                                                title="Click to inspect advanced details"
+                                            >
                                                 <td className={`p-4 font-medium ${isThreat ? 'text-rose-200' : isHumanitarian ? 'text-purple-200' : 'text-white'}`}>{t.name}</td>
                                                 <td className="p-4 text-slate-300 font-mono text-sm">{t.passport}</td>
                                                 <td className="p-4 text-slate-300">{t.country}</td>
@@ -1631,6 +2053,134 @@ export default function Home() {
 
                 </div>
             </div>
+
+            {/* ADMIN TRAVELER INSPECTOR MODAL */}
+            {showDetailModal && selectedTravelerDetail && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in-up">
+                    <div className="bg-slate-900 border border-slate-700/50 rounded-3xl p-6 sm:p-8 shadow-2xl max-w-2xl w-full relative overflow-hidden">
+                        
+                        {/* Status glow border */}
+                        <div className={`absolute top-0 left-0 right-0 h-1.5 ${selectedTravelerDetail.risk >= 70 ? 'bg-rose-500' : selectedTravelerDetail.risk >= 40 ? 'bg-amber-500' : 'bg-emerald-500'}`}></div>
+
+                        <button
+                            onClick={() => { setShowDetailModal(false); setSelectedTravelerDetail(null); }}
+                            className="absolute top-5 right-5 p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full transition-colors z-20"
+                        >
+                            <FiX className="w-5 h-5" />
+                        </button>
+
+                        <div className="relative z-10 flex items-center gap-3 mb-6">
+                            <div className={`p-2 rounded-xl border ${selectedTravelerDetail.risk >= 70 ? 'bg-rose-500/20 border-rose-500/30' : 'bg-slate-800 border-slate-700'}`}>
+                                <FiUserCheck className={`w-6 h-6 ${selectedTravelerDetail.risk >= 70 ? 'text-rose-400' : 'text-indigo-400'}`} />
+                            </div>
+                            <div>
+                                <h2 className="text-2xl font-bold text-white tracking-tight">Security Dossier Audit</h2>
+                                <p className="text-xs text-slate-400 mt-0.5">Machine ID: Ref-{selectedTravelerDetail.passport}</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            {/* LEFT COLUMN: VISUAL STAMPS */}
+                            <div className="space-y-4">
+                                <div className="bg-slate-950/60 p-4 border border-slate-800 rounded-2xl text-center">
+                                    <div className="w-20 h-20 rounded-full bg-slate-900 border border-slate-700 mx-auto flex items-center justify-center mb-3 overflow-hidden relative">
+                                        <svg className="w-12 h-12 text-slate-600" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                                        </svg>
+                                    </div>
+                                    <span className="text-[10px] text-slate-500 font-mono uppercase">Biometric Match Profile</span>
+                                    <h3 className="font-bold text-lg text-white uppercase mt-0.5">{selectedTravelerDetail.name}</h3>
+                                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-black tracking-wide mt-2 ${getColorClass(selectedTravelerDetail.risk, selectedTravelerDetail.note === "HUMANITARIAN_PROCESSING_REQUIRED")}`}>
+                                        {getStatus(selectedTravelerDetail.risk, selectedTravelerDetail.note === "HUMANITARIAN_PROCESSING_REQUIRED")}
+                                    </span>
+                                </div>
+
+                                <div className="bg-slate-950/60 p-4 border border-slate-800 rounded-2xl font-mono text-[11px] space-y-2">
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">PASSPORT NO</span>
+                                        <span className="text-white font-bold">{selectedTravelerDetail.passport}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">ORIGIN NATION</span>
+                                        <span className="text-white font-bold uppercase">{selectedTravelerDetail.country}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">RISK INDEX</span>
+                                        <span className="text-amber-400 font-bold">{selectedTravelerDetail.risk}%</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">PORTAL STATUS</span>
+                                        <span className={selectedTravelerDetail.isRegisteredUser ? "text-emerald-400 font-bold" : "text-slate-500 font-bold"}>
+                                            {selectedTravelerDetail.isRegisteredUser ? "Verified Account" : "Guest Pass"}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* RIGHT COLUMN: CORRELATION DATA */}
+                            <div className="space-y-4 font-mono text-[11px]">
+                                <div className="bg-slate-950/60 p-4 border border-slate-800 rounded-2xl space-y-3">
+                                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-800 pb-1.5">Personal Profile</h4>
+                                    <div>
+                                        <span className="text-slate-500 block uppercase text-[9px]">Contact Email</span>
+                                        <span className="text-white font-bold text-xs">{selectedTravelerDetail.email || "N/A (Offline scan)"}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500 block uppercase text-[9px]">Contact Phone</span>
+                                        <span className="text-white font-bold text-xs">{selectedTravelerDetail.phone || "N/A (Offline scan)"}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500 block uppercase text-[9px]">Date of Birth</span>
+                                        <span className="text-white font-bold text-xs">{selectedTravelerDetail.dob || "N/A (Offline scan)"}</span>
+                                    </div>
+                                </div>
+
+                                <div className="bg-slate-950/60 p-4 border border-slate-800 rounded-2xl space-y-3">
+                                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-800 pb-1.5">Flight Connection</h4>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <span className="text-slate-500 block uppercase text-[9px]">Flight Code</span>
+                                            <span className="text-white font-bold text-xs">{selectedTravelerDetail.flightNo || "N/A"}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-slate-500 block uppercase text-[9px]">Gate Assign</span>
+                                            <span className="text-amber-400 font-bold text-xs font-mono">Gate B12</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500 block uppercase text-[9px]">Operation Status</span>
+                                        <span className="text-white font-bold text-[10px]">Boarding / Checkpoint Pass Issued</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {selectedTravelerDetail.note && (
+                            <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-xl text-xs text-slate-400 mb-6 font-mono">
+                                <span className="text-[9px] text-slate-500 font-bold uppercase block mb-1">IMPRINTED RISK ASSESSOR DATA / FLAG NOTES:</span>
+                                {selectedTravelerDetail.note}
+                            </div>
+                        )}
+
+                        <div className="flex gap-4">
+                            <button
+                                onClick={() => {
+                                    alert("Immigration verification certificate printed for ledger records.")
+                                }}
+                                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors border border-slate-750"
+                            >
+                                Print Verification Record
+                            </button>
+                            <button
+                                onClick={() => { setShowDetailModal(false); setSelectedTravelerDetail(null); }}
+                                className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all"
+                            >
+                                Close Dossier Audit
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* FACE RECOGNITION MODAL */}
             {showFaceScan && (

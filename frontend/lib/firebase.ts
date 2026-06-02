@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app"
 import { getFirestore } from "firebase/firestore"
+import { getAuth } from "firebase/auth"
 
 // Firebase configuration using environment variables
 // Fallback placeholder credentials are provided to prevent app crashes before keys are configured
@@ -15,5 +16,6 @@ const firebaseConfig = {
 // Next.js Hot Reload safety check
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig)
 
-// Export Firestore database reference
+// Export Firestore and Auth references
 export const db = getFirestore(app)
+export const auth = getAuth(app)
