@@ -85,6 +85,7 @@ import {
     linkFlightJourney,
     logSecurityCheck,
     logBoardingGateEvent,
+    logGateClearance,
     logTravelHistory,
     logSystemNotification,
     dbPurgeAll
@@ -250,8 +251,6 @@ export default function Home() {
             const passengersData = await dbGetRows("passengers")
             const passportsData = await dbGetRows("passport_verifications")
             const boardingPassesData = await dbGetRows("boarding_passes")
-            const flightsData = await dbGetRows("flights")
-            const checksData = await dbGetRows("security_checks")
             const auditData = await dbGetRows("audit_logs")
             const notificationData = await dbGetRows("notifications")
             const settingsData = await dbGetRows("system_settings")
@@ -263,8 +262,6 @@ export default function Home() {
             const combined = passengersData.map(p => {
                 const pass = passportsData.find(pa => pa.passenger_id === p.id)
                 const bp = boardingPassesData.find(b => b.passenger_id === p.id)
-                const fl = bp ? flightsData.find(f => f.id === bp.flight_id) : null
-                const check = checksData.find(c => c.passenger_id === p.id)
 
                 const cName = pass?.issuing_country || "India"
                 const key = cName.toLowerCase().replace(/\s/g, '')
@@ -276,14 +273,14 @@ export default function Home() {
                     passport: pass?.passport_number || "PENDING",
                     nationality: p.nationality || "Indian",
                     country: cName,
-                    risk: check?.risk_score || 20,
-                    status: check?.risk_level || "SAFE",
+                    risk: p.security_score !== undefined ? Number(p.security_score) : 20,
+                    status: p.security_status || "SAFE",
                     lat: coords[1],
                     lng: coords[0],
-                    flightNo: fl?.flight_number || "N/A",
+                    flightNo: bp?.flight_number || "N/A",
                     verified: pass?.verification_status === "VERIFIED",
-                    lastActivity: check?.checked_at || p.created_at,
-                    note: check?.notes || ""
+                    lastActivity: p.updated_at || p.created_at,
+                    note: p.security_notes || "No threat flags identified."
                 }
             })
             setTravelers(combined)
@@ -326,23 +323,25 @@ export default function Home() {
                     setEnrollSelfieUrl(data.faceEnrollment.selfie_url)
                     setEnrollQuality(Number(data.faceEnrollment.quality_score))
                 }
-                if (data.boardingPass && data.flight) {
+                if (data.boardingPass) {
                     stage = 5 // Flight Linked
-                    setFlightPnr(data.flight.pnr)
-                    setFlightNo(data.flight.flight_number)
-                    setFlightDep(data.flight.departure_airport)
-                    setFlightArr(data.flight.arrival_airport)
-                    setFlightDate(data.flight.travel_date)
-                    setFlightTime(data.flight.boarding_time)
-                    setFlightGate(data.flight.gate)
+                    setFlightPnr(data.boardingPass.pnr)
+                    setFlightNo(data.boardingPass.flight_number)
+                    setFlightDep(data.boardingPass.departure_airport)
+                    setFlightArr(data.boardingPass.arrival_airport)
+                    setFlightDate(data.boardingPass.travel_date)
+                    setFlightTime(data.boardingPass.boarding_time)
+                    setFlightGate(data.boardingPass.gate)
                 }
-                if (data.airportEntry && data.airportEntry.verification_status === "VERIFIED") {
-                    stage = 6 // Airport Entry Approved
+                if (data.boardingPass && data.boardingPass.egate_status === "VERIFIED") {
+                    stage = 6 // Airport Entry Approved / E-Gate Cleared
                 }
-                if (data.securityCheck && data.securityCheck.risk_level === "SAFE") {
-                    stage = 7 // Security Cleared
+                if (data.passenger && data.passenger.security_status === "SAFE") {
+                    if (stage >= 4) {
+                        stage = 7 // Security Cleared
+                    }
                 }
-                if (data.boardingEvent && data.boardingEvent.status === "BOARDED") {
+                if (data.boardingPass && data.boardingPass.boarding_status === "BOARDED") {
                     stage = 8 // Boarded Successfully
                 }
 
@@ -514,7 +513,10 @@ export default function Home() {
                     { name: "name", type: "TEXT", desc: "Legal full name of travel passenger" },
                     { name: "phone", type: "TEXT", desc: "Contact mobile number" },
                     { name: "dob", type: "DATE", desc: "Official date of birth record" },
-                    { name: "nationality", type: "TEXT", desc: "Passport issuing country nationality" }
+                    { name: "nationality", type: "TEXT", desc: "Passport issuing country nationality" },
+                    { name: "security_score", type: "NUMERIC", desc: "AI computed risk coefficient (0 - 100)" },
+                    { name: "security_status", type: "TEXT", desc: "Danger assessment tier: SAFE | SECONDARY CHECK | HIGH RISK" },
+                    { name: "security_notes", type: "TEXT", desc: "Security details or officer comments" }
                 ]
             },
             {
@@ -540,34 +542,8 @@ export default function Home() {
                     { name: "passenger_id", type: "UUID [FK -> passengers.id, UNIQUE]", desc: "1:1 link to passenger" },
                     { name: "selfie_url", type: "TEXT", desc: "Registered biometric selfie image reference" },
                     { name: "face_descriptor", type: "TEXT", desc: "High-dimensional facial feature vector model" },
-                    { name: "quality_score", type: "NUMERIC", desc: "Biometric registration clarity score" }
-                ]
-            },
-            {
-                name: "face_verifications",
-                group: "Biometric Registry",
-                description: "Historical liveness verification and checkpoint matching",
-                columns: [
-                    { name: "id", type: "UUID [PK]", desc: "Biometric verification attempt ID" },
-                    { name: "passenger_id", type: "UUID [FK -> passengers.id]", desc: "1:N link to passenger history" },
-                    { name: "match_confidence", type: "NUMERIC", desc: "Matching percentage confidence score" },
-                    { name: "status", type: "TEXT", desc: "Biometric decision outcome: APPROVED | REJECTED" },
-                    { name: "captured_selfie_url", type: "TEXT", desc: "Verification attempt snapshot image path" }
-                ]
-            },
-            {
-                name: "flights",
-                group: "Travel Logistics",
-                description: "Scheduled flight information catalog database",
-                columns: [
-                    { name: "id", type: "UUID [PK]", desc: "Unique flight identifier" },
-                    { name: "pnr", type: "TEXT [UNIQUE]", desc: "Reservation Name Record ticket booking code" },
-                    { name: "flight_number", type: "TEXT", desc: "Aviation flight identifier" },
-                    { name: "departure_airport", type: "TEXT", desc: "Origin airport code" },
-                    { name: "arrival_airport", type: "TEXT", desc: "Destination airport code" },
-                    { name: "travel_date", type: "DATE", desc: "Flight departure calendar date" },
-                    { name: "boarding_time", type: "TEXT", desc: "Scheduled boarding slot" },
-                    { name: "gate", type: "TEXT", desc: "Terminal gate checkpoint location" }
+                    { name: "quality_score", type: "NUMERIC", desc: "Biometric registration clarity score" },
+                    { name: "liveness_status", type: "TEXT", desc: "Biometric enrollment status: PENDING | VERIFIED | FAILED" }
                 ]
             },
             {
@@ -576,126 +552,28 @@ export default function Home() {
                 description: "Passenger flight coupons generated for voyages",
                 columns: [
                     { name: "id", type: "UUID [PK]", desc: "Boarding pass serial tracking ID" },
-                    { name: "passenger_id", type: "UUID [FK -> passengers.id]", desc: "Link to passenger" },
-                    { name: "flight_id", type: "UUID [FK -> flights.id]", desc: "Link to scheduled flight" },
+                    { name: "passenger_id", type: "UUID [FK -> passengers.id, UNIQUE]", desc: "1:1 link to passenger" },
+                    { name: "pnr", type: "TEXT", desc: "Reservation Name Record ticket booking code" },
+                    { name: "flight_number", type: "TEXT", desc: "Aviation flight identifier" },
+                    { name: "departure_airport", type: "TEXT", desc: "Origin airport code" },
+                    { name: "arrival_airport", type: "TEXT", desc: "Destination airport code" },
+                    { name: "travel_date", type: "DATE", desc: "Flight departure calendar date" },
+                    { name: "boarding_time", type: "TEXT", desc: "Scheduled boarding slot" },
+                    { name: "gate", type: "TEXT", desc: "Terminal gate checkpoint location" },
                     { name: "seat_number", type: "TEXT", desc: "Assigned aircraft seat code" },
-                    { name: "class", type: "TEXT", desc: "Cabin class: Economy | Business | First" }
-                ]
-            },
-            {
-                name: "airport_entries",
-                group: "Security & Gates",
-                description: "Physical E-Gate validation scans for terminal access",
-                columns: [
-                    { name: "id", type: "UUID [PK]", desc: "Gate entrance log ID" },
-                    { name: "passenger_id", type: "UUID [FK -> passengers.id]", desc: "Link to passenger identity" },
-                    { name: "boarding_pass_id", type: "UUID [FK -> boarding_passes.id]", desc: "Scanned boarding card reference" },
-                    { name: "verification_status", type: "TEXT", desc: "E-Gate access decision: VERIFIED | DENIED" },
-                    { name: "entry_gate", type: "TEXT", desc: "Terminal entrance gate identifier" }
-                ]
-            },
-            {
-                name: "security_checks",
-                group: "Security & Gates",
-                description: "Risk assessments and traveler security flags",
-                columns: [
-                    { name: "id", type: "UUID [PK]", desc: "Security assessment report identifier" },
-                    { name: "passenger_id", type: "UUID [FK -> passengers.id]", desc: "Linked passenger ID reference" },
-                    { name: "risk_score", type: "NUMERIC", desc: "AI computed risk coefficient (0 - 100)" },
-                    { name: "risk_level", type: "TEXT", desc: "Danger assessment tier: SAFE | SECONDARY CHECK | HIGH RISK" },
-                    { name: "notes", type: "TEXT", desc: "Security details or officer comments" }
-                ]
-            },
-            {
-                name: "boarding_events",
-                group: "Security & Gates",
-                description: "Aircraft flight gate boarding logs",
-                columns: [
-                    { name: "id", type: "UUID [PK]", desc: "Boarding gate transaction ID" },
-                    { name: "passenger_id", type: "UUID [FK -> passengers.id]", desc: "Boarding traveler reference" },
-                    { name: "boarding_pass_id", type: "UUID [FK -> boarding_passes.id]", desc: "Scanned boarding pass ID" },
-                    { name: "status", type: "TEXT", desc: "Gate boarding status: BOARDED | REJECTED" },
-                    { name: "gate_agent", type: "TEXT", desc: "Validating device or gate official name" }
-                ]
-            },
-            {
-                name: "travel_history",
-                group: "Audit & Logs",
-                description: "Detailed step-by-step traveler timeline audit log",
-                columns: [
-                    { name: "id", type: "UUID [PK]", desc: "Milestone logging transaction ID" },
-                    { name: "passenger_id", type: "UUID [FK -> passengers.id]", desc: "Link to traveler profile" },
-                    { name: "action_taken", type: "TEXT", desc: "Milestone code name description" },
-                    { name: "location", type: "TEXT", desc: "Airport terminal station location" },
-                    { name: "timestamp", type: "TIMESTAMP", desc: "Milestone completion time log" }
-                ]
-            },
-            {
-                name: "audit_logs",
-                group: "Audit & Logs",
-                description: "Immutable ledger tracking database queries",
-                columns: [
-                    { name: "id", type: "UUID [PK]", desc: "Ledger transaction index ID" },
-                    { name: "user_id", type: "UUID [FK -> users.id]", desc: "Operating session credential ID" },
-                    { name: "action", type: "TEXT", desc: "Database query transaction (INSERT, UPDATE, DELETE)" },
-                    { name: "actor", type: "TEXT", desc: "Operating agent profile tag name" },
-                    { name: "status", type: "TEXT", desc: "Database transaction execution result status" },
-                    { name: "description", type: "TEXT", desc: "Descriptive string details" }
-                ]
-            },
-            {
-                name: "notifications",
-                group: "Audit & Logs",
-                description: "System notifications queued for users",
-                columns: [
-                    { name: "id", type: "UUID [PK]", desc: "Message queue index ID" },
-                    { name: "user_id", type: "UUID [FK -> users.id]", desc: "Target user inbox account ID" },
-                    { name: "title", type: "TEXT", desc: "Notification summary title" },
-                    { name: "message", type: "TEXT", desc: "Detailed warning alert text" },
-                    { name: "is_read", type: "BOOLEAN", desc: "Visual status indicating if user read alert" }
-                ]
-            },
-            {
-                name: "system_settings",
-                group: "System & Stats",
-                description: "Global operational settings and environment toggles",
-                columns: [
-                    { name: "id", type: "UUID [PK]", desc: "Unique setting key record identifier" },
-                    { name: "setting_key", type: "TEXT [UNIQUE]", desc: "Config system key name" },
-                    { name: "setting_value", type: "TEXT", desc: "Active configuration setup value" },
-                    { name: "description", type: "TEXT", desc: "Detailed setting role explanation" }
-                ]
-            },
-            {
-                name: "analytics",
-                group: "System & Stats",
-                description: "Performance charts data and daily summaries",
-                columns: [
-                    { name: "id", type: "UUID [PK]", desc: "Analytics metric primary key ID" },
-                    { name: "metric_name", type: "TEXT", desc: "Metric benchmark category tag name" },
-                    { name: "metric_value", type: "NUMERIC", desc: "Quantifiable metric database score" },
-                    { name: "category", type: "TEXT", desc: "Grouping classification tag name" },
-                    { name: "recorded_date", type: "DATE", desc: "System logging business calendar day" }
+                    { name: "class", type: "TEXT", desc: "Cabin class: Economy | Business | First" },
+                    { name: "egate_status", type: "TEXT", desc: "E-Gate access decision: PENDING | VERIFIED | DENIED" },
+                    { name: "boarding_status", type: "TEXT", desc: "Boarding status: PENDING | BOARDED | FAILED" }
                 ]
             }
         ]
 
         const RELATIONSHIPS: Record<string, { parent?: string[]; children?: string[] }> = {
-            users: { children: ["passengers", "audit_logs", "notifications"] },
-            passengers: { parent: ["users"], children: ["passport_verifications", "face_enrollments", "face_verifications", "boarding_passes", "airport_entries", "security_checks", "boarding_events", "travel_history"] },
+            users: { children: ["passengers"] },
+            passengers: { parent: ["users"], children: ["passport_verifications", "face_enrollments", "boarding_passes"] },
             passport_verifications: { parent: ["passengers"] },
             face_enrollments: { parent: ["passengers"] },
-            face_verifications: { parent: ["passengers"] },
-            flights: { children: ["boarding_passes"] },
-            boarding_passes: { parent: ["passengers", "flights"], children: ["airport_entries", "boarding_events"] },
-            airport_entries: { parent: ["passengers", "boarding_passes"] },
-            security_checks: { parent: ["passengers"] },
-            boarding_events: { parent: ["passengers", "boarding_passes"] },
-            travel_history: { parent: ["passengers"] },
-            audit_logs: { parent: ["users"] },
-            notifications: { parent: ["users"] },
-            system_settings: {},
-            analytics: {}
+            boarding_passes: { parent: ["passengers"] }
         }
 
         return (
@@ -1091,7 +969,6 @@ export default function Home() {
                 try {
                     let matchedPassenger = null
                     const passengers = await dbGetRows("passengers")
-                    const checks = await dbGetRows("security_checks")
 
                     if (profileData) {
                         matchedPassenger = profileData.passenger
@@ -1105,8 +982,7 @@ export default function Home() {
                         return
                     }
 
-                    const check = checks.find(c => c.passenger_id === matchedPassenger.id)
-                    const riskScore = check?.risk_score || 20
+                    const riskScore = matchedPassenger.security_score !== undefined ? Number(matchedPassenger.security_score) : 20
 
                     if (riskScore >= 70) {
                         setCameraState("failed")
@@ -1174,8 +1050,6 @@ export default function Home() {
                     const passengers = await dbGetRows("passengers")
                     const passports = await dbGetRows("passport_verifications")
                     const boardingPasses = await dbGetRows("boarding_passes")
-                    const flights = await dbGetRows("flights")
-                    const checks = await dbGetRows("security_checks")
 
                     let activeMatch = profileData ? profileData.passenger : (passengers.length > 0 ? passengers[passengers.length - 1] : null)
 
@@ -1185,13 +1059,14 @@ export default function Home() {
                         return
                     }
 
-                    const pass = passports.find(p => p.passenger_id === activeMatch.id)
-                    const bp = boardingPasses.find(b => b.passenger_id === activeMatch.id)
-                    const flight = bp ? flights.find(f => f.id === bp.flight_id) : null
-                    const check = checks.find(c => c.passenger_id === activeMatch.id)
-                    const risk = check?.risk_score || 20
+                    // Get the fresh record from passengers list to ensure we have the latest database state
+                    const freshPassenger = passengers.find(p => p.id === activeMatch.id) || activeMatch;
 
-                    addLog(`👤 Matched passenger: ${activeMatch.name.toUpperCase()}`)
+                    const pass = passports.find(p => p.passenger_id === freshPassenger.id)
+                    const bp = boardingPasses.find(b => b.passenger_id === freshPassenger.id)
+                    const risk = freshPassenger.security_score !== undefined ? Number(freshPassenger.security_score) : 20
+
+                    addLog(`👤 Matched passenger: ${freshPassenger.name.toUpperCase()}`)
                     
                     if (!pass) {
                         setGateState("denied")
@@ -1203,26 +1078,21 @@ export default function Home() {
 
                     setTimeout(async () => {
                         try {
-                            if (!bp || !flight) {
+                            if (!bp) {
                                 setGateState("denied")
                                 addLog("🔴 ACCESS DENIED: Flight journey or ticket details missing.")
                                 return
                             }
 
-                            addLog(`🎫 Flight ticket validated: ${flight.flight_number} PNR: ${flight.pnr}`)
+                            addLog(`🎫 Flight ticket validated: ${bp.flight_number} PNR: ${bp.pnr}`)
 
                             setTimeout(async () => {
                                 try {
-                                    if (risk >= 70 || WATCHLIST.some(w => w.name === activeMatch.name.toUpperCase())) {
+                                    if (risk >= 70 || WATCHLIST.some(w => w.name === freshPassenger.name.toUpperCase())) {
                                         setGateState("alert")
                                         addLog("🚨 ALARM INTRUSION: Watchlist police intercept triggered!")
 
-                                        await dbInsertRow("airport_entries", {
-                                            passenger_id: activeMatch.id,
-                                            boarding_pass_id: bp.id,
-                                            verification_status: "DENIED",
-                                            entry_gate: "EGATE-A1"
-                                        })
+                                        await logGateClearance(freshPassenger.id, "DENIED")
                                         syncSystemData()
                                         return
                                     }
@@ -1231,19 +1101,14 @@ export default function Home() {
                                     setGateMatchConfidence(97.8)
                                     addLog("🟢 CLEARANCE CONFIRMED. COMPLIANCE ENTRANCE OPENED.")
 
-                                    await dbInsertRow("airport_entries", {
-                                        passenger_id: activeMatch.id,
-                                        boarding_pass_id: bp.id,
-                                        verification_status: "VERIFIED",
-                                        entry_gate: "EGATE-A1"
-                                    })
-                                    await logTravelHistory(activeMatch.id, "EGATE_CLEARED", "EGATE-A1")
+                                    await logGateClearance(freshPassenger.id, "VERIFIED")
+                                    await logTravelHistory(freshPassenger.id, "EGATE_CLEARED", "EGATE-A1")
 
                                     // Audit
                                     await dbInsertRow("audit_logs", {
                                         user_id: currentUserId,
                                         action: "GATE_ENTRY",
-                                        actor: activeMatch.name,
+                                        actor: freshPassenger.name,
                                         status: "SUCCESS",
                                         description: `Authorized e-gate entry clearance. Gate: EGATE-A1, Score: 97.8%`
                                     })
@@ -1316,7 +1181,7 @@ export default function Home() {
                         setBoardState("completed")
                         addLog("🟢 BOARDING COMPLETE. Flight journey record successfully logged.")
 
-                        await logBoardingGateEvent(boardUser.id, bp.id, "BOARDED")
+                        await logBoardingGateEvent(boardUser.id, "BOARDED")
                         await logTravelHistory(boardUser.id, "BOARDED", "GATE B12")
 
                         // Audit
@@ -2636,15 +2501,14 @@ export default function Home() {
                                                 <label className="text-[10px] text-slate-400 block mb-1">Select Passenger ID</label>
                                                 <select 
                                                     value={screenPassengerId} 
-                                                    onChange={async (e) => {
+                                                    onChange={(e) => {
                                                         const pId = e.target.value
                                                         setScreenPassengerId(pId)
-                                                        const checks = await dbGetRows("security_checks")
-                                                        const pCheck = checks.find(c => c.passenger_id === pId)
-                                                        if (pCheck) {
-                                                            setScreenRiskScore(Number(pCheck.risk_score))
-                                                            setScreenStatus(pCheck.risk_level)
-                                                            setScreenNotes(pCheck.notes || "")
+                                                        const targetTrav = travelers.find(t => t.id === pId)
+                                                        if (targetTrav) {
+                                                            setScreenRiskScore(Number(targetTrav.risk))
+                                                            setScreenStatus(targetTrav.status)
+                                                            setScreenNotes(targetTrav.note || "")
                                                         } else {
                                                             setScreenRiskScore(20)
                                                             setScreenStatus("SAFE")
@@ -2981,24 +2845,11 @@ export default function Home() {
                                             passengers: { icon: UserCheck, color: "text-blue-400 bg-blue-500/10", desc: "Legal identities" },
                                             passport_verifications: { icon: FileText, color: "text-sky-400 bg-sky-500/10", desc: "Passport OCR credentials" },
                                             face_enrollments: { icon: Camera, color: "text-purple-400 bg-purple-500/10", desc: "Enrolled face data" },
-                                            face_verifications: { icon: Aperture, color: "text-purple-450 bg-purple-500/10", desc: "Biometric attempts history" },
-                                            flights: { icon: Globe, color: "text-amber-400 bg-amber-500/10", desc: "Aviation flight list catalog" },
-                                            boarding_passes: { icon: FileSpreadsheet, color: "text-amber-450 bg-amber-500/10", desc: "Traveler boarding passes" },
-                                            airport_entries: { icon: Lock, color: "text-rose-450 bg-rose-500/10", desc: "Terminal gate entrances" },
-                                            security_checks: { icon: Shield, color: "text-rose-400 bg-rose-500/10", desc: "Immigration risk logs" },
-                                            boarding_events: { icon: Activity, color: "text-rose-500 bg-rose-500/10", desc: "Aircraft boarding checks" },
-                                            travel_history: { icon: History, color: "text-slate-450 bg-slate-500/10", desc: "Passenger journey milestones" },
-                                            audit_logs: { icon: Layers, color: "text-slate-400 bg-slate-500/10", desc: "System transaction logs" },
-                                            notifications: { icon: Mail, color: "text-slate-500 bg-slate-500/10", desc: "User inbox messages queue" },
-                                            system_settings: { icon: SettingsIcon, color: "text-teal-400 bg-teal-500/10", desc: "Global config parameters" },
-                                            analytics: { icon: BarChart2, color: "text-teal-450 bg-teal-500/10", desc: "Daily compiled system stats" }
+                                            boarding_passes: { icon: FileSpreadsheet, color: "text-amber-450 bg-amber-500/10", desc: "Traveler boarding passes" }
                                         }
 
                                         return [
-                                            "users", "passengers", "passport_verifications", "face_enrollments",
-                                            "face_verifications", "flights", "boarding_passes", "airport_entries",
-                                            "security_checks", "boarding_events", "travel_history", "audit_logs",
-                                            "notifications", "system_settings", "analytics"
+                                            "users", "passengers", "passport_verifications", "face_enrollments", "boarding_passes"
                                         ].map((table, idx) => {
                                             const meta = tableMetadata[table] || { icon: Database, color: "text-slate-400 bg-slate-500/10", desc: "Data table relation" }
                                             const TableIcon = meta.icon

@@ -24,51 +24,20 @@ function getFallbackStore(): Record<string, any[]> {
                 { id: "user-trump-123", email: "donald@trump.com", password: "Pass123", role: "passenger", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
             ],
             passengers: [
-                { id: "passenger-sarah-123", user_id: "user-sarah-123", name: "SARAH CONNOR", phone: "+91 9876543210", dob: "1990-05-15", nationality: "Indian", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-                { id: "passenger-trump-123", user_id: "user-trump-123", name: "DONALD TRUMP", phone: "+1 555-0199", dob: "1946-06-14", nationality: "United States", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+                { id: "passenger-sarah-123", user_id: "user-sarah-123", name: "SARAH CONNOR", phone: "+91 9876543210", dob: "1990-05-15", nationality: "Indian", security_score: 20, security_status: "SAFE", security_notes: "Clear background checks.", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+                { id: "passenger-trump-123", user_id: "user-trump-123", name: "DONALD TRUMP", phone: "+1 555-0199", dob: "1946-06-14", nationality: "United States", security_score: 85, security_status: "HIGH RISK", security_notes: "Flagged High-Risk VIP - Watchlist Interpol.", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
             ],
             passport_verifications: [
                 { id: "passport-sarah-123", passenger_id: "passenger-sarah-123", passport_number: "J1234567", issuing_country: "India", expiry_date: "2035-12-31", ocr_status: "SUCCESS", verification_status: "VERIFIED", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
                 { id: "passport-trump-123", passenger_id: "passenger-trump-123", passport_number: "W0000001", issuing_country: "United States", expiry_date: "2032-06-14", ocr_status: "SUCCESS", verification_status: "VERIFIED", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
             ],
             face_enrollments: [
-                { id: "face-sarah-123", passenger_id: "passenger-sarah-123", selfie_url: "/mock_selfie.jpg", quality_score: 0.98, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-                { id: "face-trump-123", passenger_id: "passenger-trump-123", selfie_url: "/trump_target.jpg", quality_score: 0.99, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
-            ],
-            face_verifications: [],
-            flights: [
-                { id: "f1", pnr: "PNR10293", flight_number: "SG-302", departure_airport: "DEL", arrival_airport: "JFK", travel_date: new Date().toISOString().split('T')[0], boarding_time: "19:30", gate: "Gate B12", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-                { id: "f2", pnr: "PNR29482", flight_number: "AI-101", departure_airport: "BOM", arrival_airport: "LHR", travel_date: new Date().toISOString().split('T')[0], boarding_time: "20:15", gate: "Gate C04", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-                { id: "f3", pnr: "PNR84029", flight_number: "EK-503", departure_airport: "DXB", arrival_airport: "DEL", travel_date: new Date().toISOString().split('T')[0], boarding_time: "08:45", gate: "Gate A02", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-                { id: "f4", pnr: "PNR74028", flight_number: "LH-760", departure_airport: "FRA", arrival_airport: "BLR", travel_date: new Date().toISOString().split('T')[0], boarding_time: "22:00", gate: "Gate B20", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+                { id: "face-sarah-123", passenger_id: "passenger-sarah-123", selfie_url: "/mock_selfie.jpg", quality_score: 0.98, liveness_status: "VERIFIED", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+                { id: "face-trump-123", passenger_id: "passenger-trump-123", selfie_url: "/trump_target.jpg", quality_score: 0.99, liveness_status: "VERIFIED", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
             ],
             boarding_passes: [
-                { id: "bp-sarah-123", passenger_id: "passenger-sarah-123", flight_id: "f1", seat_number: "Seat 12A", class: "Economy", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-                { id: "bp-trump-123", passenger_id: "passenger-trump-123", flight_id: "f2", seat_number: "Seat 01F", class: "First", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
-            ],
-            airport_entries: [],
-            security_checks: [],
-            boarding_events: [],
-            travel_history: [],
-            audit_logs: [],
-            notifications: [],
-            system_settings: [
-                { id: "s1", setting_key: "OFFLINE_MODE", setting_value: "false", description: "Enable local storage database mode", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-                { id: "s2", setting_key: "BIOMETRIC_ACCURACY_THRESHOLD", setting_value: "90.0", description: "Required face match percentage", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-                { id: "s3", setting_key: "SECURITY_SYSTEM_STATUS", setting_value: "ACTIVE", description: "Health code status of border check points", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
-            ],
-            analytics: [
-                { id: "a1", metric_name: "passenger_registrations", metric_value: 15, category: "registrations", recorded_date: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], created_at: new Date().toISOString() },
-                { id: "a2", metric_name: "passenger_registrations", metric_value: 22, category: "registrations", recorded_date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], created_at: new Date().toISOString() },
-                { id: "a3", metric_name: "passenger_registrations", metric_value: 38, category: "registrations", recorded_date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], created_at: new Date().toISOString() },
-                { id: "a4", metric_name: "passenger_registrations", metric_value: 45, category: "registrations", recorded_date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], created_at: new Date().toISOString() },
-                { id: "a5", metric_name: "passenger_registrations", metric_value: 62, category: "registrations", recorded_date: new Date().toISOString().split('T')[0], created_at: new Date().toISOString() },
-                
-                { id: "a6", metric_name: "verification_success_rate", metric_value: 92, category: "success_rate", recorded_date: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], created_at: new Date().toISOString() },
-                { id: "a7", metric_name: "verification_success_rate", metric_value: 94, category: "success_rate", recorded_date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], created_at: new Date().toISOString() },
-                { id: "a8", metric_name: "verification_success_rate", metric_value: 93, category: "success_rate", recorded_date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], created_at: new Date().toISOString() },
-                { id: "a9", metric_name: "verification_success_rate", metric_value: 96, category: "success_rate", recorded_date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], created_at: new Date().toISOString() },
-                { id: "a10", metric_name: "verification_success_rate", metric_value: 98, category: "success_rate", recorded_date: new Date().toISOString().split('T')[0], created_at: new Date().toISOString() }
+                { id: "bp-sarah-123", passenger_id: "passenger-sarah-123", pnr: "PNR10293", flight_number: "SG-302", departure_airport: "DEL", arrival_airport: "JFK", travel_date: new Date().toISOString().split('T')[0], boarding_time: "19:30", gate: "Gate B12", seat_number: "Seat 12A", class: "Economy", egate_status: "PENDING", boarding_status: "PENDING", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+                { id: "bp-trump-123", passenger_id: "passenger-trump-123", pnr: "PNR29482", flight_number: "AI-101", departure_airport: "BOM", arrival_airport: "LHR", travel_date: new Date().toISOString().split('T')[0], boarding_time: "20:15", gate: "Gate C04", seat_number: "Seat 01F", class: "First", egate_status: "PENDING", boarding_status: "PENDING", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
             ]
         }
         localStorage.setItem(FALLBACK_KEY, JSON.stringify(defaultStore))
@@ -100,7 +69,12 @@ function isMissingTableError(error: any): boolean {
 // CORE DATABASE CRUD OPERATIONS FOR EXPLORER & PLAYGROUND
 // -------------------------------------------------------------
 
+const CORE_TABLES = ["users", "passengers", "passport_verifications", "face_enrollments", "boarding_passes"];
+
 export async function dbGetRows(tableName: string): Promise<any[]> {
+    if (!CORE_TABLES.includes(tableName)) {
+        return getFallbackStore()[tableName] || []
+    }
     try {
         const { data, error } = await supabase
             .from(tableName)
@@ -126,6 +100,14 @@ export async function dbInsertRow(tableName: string, rowData: any): Promise<any>
         ...rowData,
         created_at: rowData.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString()
+    }
+    if (!CORE_TABLES.includes(tableName)) {
+        const store = getFallbackStore()
+        if (!store[tableName]) store[tableName] = []
+        const newRow = { id: rowData.id || crypto.randomUUID(), ...formattedData }
+        store[tableName].push(newRow)
+        saveFallbackStore(store)
+        return newRow
     }
     try {
         const { data, error } = await supabase
@@ -162,6 +144,17 @@ export async function dbUpdateRow(tableName: string, matchKey: string, matchVal:
     const formattedData = {
         ...rowData,
         updated_at: new Date().toISOString()
+    }
+    if (!CORE_TABLES.includes(tableName)) {
+        const store = getFallbackStore()
+        const rows = store[tableName] || []
+        const index = rows.findIndex(r => r[matchKey] === matchVal)
+        if (index !== -1) {
+            rows[index] = { ...rows[index], ...formattedData }
+            saveFallbackStore(store)
+            return rows[index]
+        }
+        return formattedData
     }
     try {
         const { data, error } = await supabase
@@ -201,6 +194,14 @@ export async function dbUpdateRow(tableName: string, matchKey: string, matchVal:
 }
 
 export async function dbDeleteRow(tableName: string, matchKey: string, matchVal: any): Promise<boolean> {
+    if (!CORE_TABLES.includes(tableName)) {
+        const store = getFallbackStore()
+        const rows = store[tableName] || []
+        const filtered = rows.filter(r => r[matchKey] !== matchVal)
+        store[tableName] = filtered
+        saveFallbackStore(store)
+        return true
+    }
     try {
         const { error } = await supabase
             .from(tableName)
@@ -249,13 +250,16 @@ export async function syncUserAccount(uid: string, email: string, role: string =
             name: email.split("@")[0].toUpperCase(),
             phone: "",
             dob: null,
-            nationality: "Indian"
+            nationality: "Indian",
+            security_score: 20,
+            security_status: "SAFE",
+            security_notes: "Clear background checks."
         })
     }
     return passenger
 }
 
-// Get user profile details (passenger + passport + face_enrollment + boarding_pass + checks)
+// Get user profile details (passenger + passport + face_enrollment + boarding_pass)
 export async function getPassengerProfileComplete(uid: string) {
     const passengers = await dbGetRows("passengers")
     const passenger = passengers.find(p => p.user_id === uid)
@@ -270,38 +274,11 @@ export async function getPassengerProfileComplete(uid: string) {
     const passes = await dbGetRows("boarding_passes")
     const boardingPass = passes.find(p => p.passenger_id === passenger.id)
 
-    let flight = null
-    if (boardingPass) {
-        const flights = await dbGetRows("flights")
-        flight = flights.find(f => f.id === boardingPass.flight_id)
-    }
-
-    const verifications = await dbGetRows("face_verifications")
-    const faceVerification = verifications.filter(v => v.passenger_id === passenger.id).pop()
-
-    const entries = await dbGetRows("airport_entries")
-    const airportEntry = entries.find(e => e.passenger_id === passenger.id)
-
-    const checks = await dbGetRows("security_checks")
-    const securityCheck = checks.find(c => c.passenger_id === passenger.id)
-
-    const bEvents = await dbGetRows("boarding_events")
-    const boardingEvent = bEvents.find(e => e.passenger_id === passenger.id)
-
-    const travelHistory = await dbGetRows("travel_history")
-    const history = travelHistory.filter(h => h.passenger_id === passenger.id)
-
     return {
         passenger,
         passport,
         faceEnrollment,
-        boardingPass,
-        flight,
-        faceVerification,
-        airportEntry,
-        securityCheck,
-        boardingEvent,
-        travelHistory: history
+        boardingPass
     }
 }
 
@@ -316,8 +293,7 @@ export async function enrollPassport(passengerId: string, details: { passportNum
         issuing_country: details.country,
         expiry_date: new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 10 years expiry
         ocr_status: details.ocrStatus,
-        verification_status: details.ocrStatus === "VERIFIED" ? "VERIFIED" : "PENDING",
-        raw_ocr_json: JSON.stringify({ document: "PASSPORT", number: details.passportNumber, country: details.country, scanned: new Date().toISOString() })
+        verification_status: details.ocrStatus === "VERIFIED" ? "VERIFIED" : "PENDING"
     }
 
     if (existing) {
@@ -336,7 +312,8 @@ export async function enrollFaceBiometrics(passengerId: string, selfieUrl: strin
         passenger_id: passengerId,
         selfie_url: selfieUrl,
         quality_score: score,
-        face_descriptor: "[-0.0824,0.1284,-0.0482,0.0249,0.0104]" // Mock vector
+        face_descriptor: "[-0.0824,0.1284,-0.0482,0.0249,0.0104]", // Mock vector
+        liveness_status: "VERIFIED"
     }
 
     if (existing) {
@@ -356,112 +333,83 @@ export async function linkFlightJourney(passengerId: string, flightInput: {
     boardingTime: string,
     gate: string
 }) {
-    const flights = await dbGetRows("flights")
-    let flight = flights.find(f => f.pnr.toUpperCase() === flightInput.pnr.toUpperCase())
-    
-    const flightData = {
+    const passes = await dbGetRows("boarding_passes")
+    const existingPass = passes.find(p => p.passenger_id === passengerId)
+
+    const passData = {
+        passenger_id: passengerId,
         pnr: flightInput.pnr.toUpperCase().trim(),
         flight_number: flightInput.flightNo.toUpperCase().trim(),
         departure_airport: flightInput.depAirport.toUpperCase().trim(),
         arrival_airport: flightInput.arrAirport.toUpperCase().trim(),
         travel_date: flightInput.travelDate,
         boarding_time: flightInput.boardingTime,
-        gate: flightInput.gate
+        gate: flightInput.gate,
+        seat_number: existingPass?.seat_number || "Seat " + (Math.floor(Math.random() * 30) + 1) + String.fromCharCode(65 + Math.floor(Math.random() * 6)),
+        class: existingPass?.class || "Economy",
+        egate_status: existingPass?.egate_status || "PENDING",
+        boarding_status: existingPass?.boarding_status || "PENDING"
     }
 
-    if (!flight) {
-        flight = await dbInsertRow("flights", flightData)
-    } else {
-        flight = await dbUpdateRow("flights", "id", flight.id, flightData)
-    }
-
-    // Link to passenger via boarding pass
-    const passes = await dbGetRows("boarding_passes")
-    const existingPass = passes.find(p => p.passenger_id === passengerId)
-
-    const passData = {
-        passenger_id: passengerId,
-        flight_id: flight.id,
-        seat_number: "Seat " + (Math.floor(Math.random() * 30) + 1) + String.fromCharCode(65 + Math.floor(Math.random() * 6)),
-        class: "Economy"
-    }
-
+    let result
     if (existingPass) {
-        await dbUpdateRow("boarding_passes", "id", existingPass.id, passData)
+        result = await dbUpdateRow("boarding_passes", "passenger_id", passengerId, passData)
     } else {
-        await dbInsertRow("boarding_passes", passData)
+        result = await dbInsertRow("boarding_passes", passData)
     }
 
-    return { flight, passData }
+    return { boardingPass: result }
 }
 
-// Record security/risk check (Step 4 Check)
+// Record security/risk check (Step 4 Check - direct update on passenger profile)
 export async function logSecurityCheck(passengerId: string, riskScore: number, notes: string) {
     let riskLevel = "SAFE"
     if (riskScore >= 70) riskLevel = "HIGH RISK"
     else if (riskScore >= 40) riskLevel = "SECONDARY CHECK"
 
-    const checks = await dbGetRows("security_checks")
-    const existing = checks.find(c => c.passenger_id === passengerId)
-
-    const checkData = {
-        passenger_id: passengerId,
-        risk_score: riskScore,
-        risk_level: riskLevel,
-        notes: notes,
-        checked_at: new Date().toISOString()
-    }
-
-    if (existing) {
-        return await dbUpdateRow("security_checks", "passenger_id", passengerId, checkData)
-    } else {
-        return await dbInsertRow("security_checks", checkData)
-    }
-}
-
-// Log Boarding Gate Complete Event (Step 5)
-export async function logBoardingGateEvent(passengerId: string, boardingPassId: string, status: string = "BOARDED") {
-    const boardingEventData = {
-        passenger_id: passengerId,
-        boarding_pass_id: boardingPassId,
-        status,
-        gate_agent: "AUTO_EGATE_SIMULATOR"
-    }
-    return await dbInsertRow("boarding_events", boardingEventData)
-}
-
-// Log specific journey event
-export async function logTravelHistory(passengerId: string, action: string, location: string = "MAIN TERMINAL") {
-    return await dbInsertRow("travel_history", {
-        passenger_id: passengerId,
-        action_taken: action,
-        location,
-        timestamp: new Date().toISOString()
+    return await dbUpdateRow("passengers", "id", passengerId, {
+        security_score: riskScore,
+        security_status: riskLevel,
+        security_notes: notes
     })
 }
 
-// Log general system notification
-export async function logSystemNotification(userId: string, title: string, message: string) {
+// Record E-Gate Clearance status
+export async function logGateClearance(passengerId: string, status: string = "VERIFIED") {
+    return await dbUpdateRow("boarding_passes", "passenger_id", passengerId, {
+        egate_status: status
+    })
+}
+
+// Log Boarding Gate Complete Event (Step 5)
+export async function logBoardingGateEvent(passengerId: string, status: string = "BOARDED") {
+    return await dbUpdateRow("boarding_passes", "passenger_id", passengerId, {
+        boarding_status: status
+    })
+}
+
+// Log travel history entry (saved to local fallback store)
+export async function logTravelHistory(passengerId: string, activityType: string, location: string) {
+    return await dbInsertRow("travel_history", {
+        passenger_id: passengerId,
+        activity_type: activityType,
+        location: location
+    })
+}
+
+// Log system notification entry (saved to local fallback store)
+export async function logSystemNotification(userId: string, title: string, message: string, type: string = "INFO") {
     return await dbInsertRow("notifications", {
         user_id: userId,
         title,
         message,
-        is_read: false
+        type
     })
 }
 
 // Clear all database tables (reset option)
 export async function dbPurgeAll() {
     const tables = [
-        "analytics",
-        "notifications",
-        "system_settings",
-        "audit_logs",
-        "travel_history",
-        "boarding_events",
-        "security_checks",
-        "airport_entries",
-        "face_verifications",
         "boarding_passes",
         "face_enrollments",
         "passport_verifications",
