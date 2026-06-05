@@ -1135,6 +1135,13 @@ export default function Home() {
     // AIRPORT GATE ENTRY SIMULATION ACTIONS
     // -------------------------------------------------------------
     const runGateClearanceSimulation = async () => {
+        if (gateState === "success" || gateState === "denied" || gateState === "alert") {
+            setGateLogs([])
+            setGateMatchConfidence(null)
+            setGateState("idle")
+            addTerminalLog("E-Gate simulator reset. Standing by...")
+            return
+        }
         if (gateState !== "idle") return
         setGateLogs([])
         setGateState("scanning")
@@ -1241,6 +1248,12 @@ export default function Home() {
     // BOARDING GATE SIMULATION ACTIONS
     // -------------------------------------------------------------
     const runBoardingGateSimulation = async () => {
+        if (boardState === "completed" || boardState === "error") {
+            setBoardLogs([])
+            setBoardState("idle")
+            addTerminalLog("Boarding Gate simulator reset. Standing by...")
+            return
+        }
         if (boardState !== "idle") return
         setBoardLogs([])
         setBoardState("matching")
@@ -2161,29 +2174,7 @@ export default function Home() {
                     {/* Right corner actions */}
                     <div className="flex items-center gap-4">
                         
-                        {/* DEMO ROLE BYPASS CONTROLLER (Admin clearance only) */}
-                        {authRole === "admin" && (
-                            <div className="flex gap-1 bg-slate-950 border border-slate-850 p-1 rounded-xl">
-                                <button
-                                    onClick={() => {
-                                        setAuthRole("user")
-                                        setActiveModule("passenger")
-                                    }}
-                                    className="px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all uppercase text-slate-400 hover:text-slate-200"
-                                >
-                                    Passenger
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setAuthRole("admin")
-                                        setActiveModule("dashboard")
-                                    }}
-                                    className="px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all uppercase bg-indigo-600 text-white"
-                                >
-                                    Admin
-                                </button>
-                            </div>
-                        )}
+
 
                         {/* Notifications list icon */}
                         <div className="relative">
@@ -2537,8 +2528,22 @@ export default function Home() {
                                                 </div>
                                             )}
                                         </div>
-                                        <button onClick={runGateClearanceSimulation} disabled={gateState !== "idle"} className="w-full bg-purple-600 hover:bg-purple-550 disabled:bg-slate-850 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider">
-                                            Clear Gate Entrance
+                                        <button 
+                                            onClick={runGateClearanceSimulation} 
+                                            disabled={gateState === "scanning" || gateState === "matching" || gateState === "verifying"} 
+                                            className={`w-full font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition-all ${
+                                                gateState === "success" 
+                                                    ? "bg-emerald-600 hover:bg-emerald-550 text-white animate-pulse" 
+                                                    : gateState === "denied" || gateState === "alert"
+                                                        ? "bg-rose-600 hover:bg-rose-550 text-white animate-pulse"
+                                                        : "bg-purple-600 hover:bg-purple-550 text-white disabled:bg-slate-850"
+                                            }`}
+                                        >
+                                            {gateState === "success" || gateState === "denied" || gateState === "alert" 
+                                                ? "Reset & Scan Again" 
+                                                : gateState === "scanning" || gateState === "matching" || gateState === "verifying"
+                                                    ? "Scanning..."
+                                                    : "Clear Gate Entrance"}
                                         </button>
                                     </div>
 
@@ -2734,8 +2739,22 @@ export default function Home() {
                                                 </div>
                                             )}
                                         </div>
-                                        <button onClick={runBoardingGateSimulation} disabled={boardState !== "idle"} className="w-full bg-indigo-600 hover:bg-indigo-550 disabled:bg-slate-850 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider font-mono">
-                                            Scan & Verify Boarding credentials
+                                        <button 
+                                            onClick={runBoardingGateSimulation} 
+                                            disabled={boardState === "matching" || boardState === "cleared"} 
+                                            className={`w-full font-bold py-3 rounded-xl text-xs uppercase tracking-wider font-mono transition-all ${
+                                                boardState === "completed" 
+                                                    ? "bg-emerald-600 hover:bg-emerald-550 text-white animate-pulse" 
+                                                    : boardState === "error"
+                                                        ? "bg-rose-600 hover:bg-rose-550 text-white animate-pulse"
+                                                        : "bg-indigo-600 hover:bg-indigo-550 text-white disabled:bg-slate-850"
+                                            }`}
+                                        >
+                                            {boardState === "completed" || boardState === "error" 
+                                                ? "Reset & Board Again" 
+                                                : boardState === "matching" || boardState === "cleared"
+                                                    ? "Verifying Biometrics..."
+                                                    : "Scan & Verify Boarding Credentials"}
                                         </button>
                                     </div>
 
@@ -2878,25 +2897,59 @@ export default function Home() {
                             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                                 <div className="space-y-2 lg:col-span-1">
                                     <div className="text-[9px] font-bold text-slate-500 font-mono uppercase tracking-widest px-1.5 mb-2">Select Relation Table</div>
-                                    {[
-                                        "users", "passengers", "passport_verifications", "face_enrollments",
-                                        "face_verifications", "flights", "boarding_passes", "airport_entries",
-                                        "security_checks", "boarding_events", "travel_history", "audit_logs",
-                                        "notifications", "system_settings", "analytics"
-                                    ].map((table, idx) => (
-                                        <button
-                                            key={idx}
-                                            onClick={() => setExplorerTable(table)}
-                                            className={`w-full text-left px-3 py-2.5 rounded-xl font-mono text-xs transition-all flex items-center justify-between border ${
-                                                explorerTable === table 
-                                                    ? "bg-indigo-600 border-indigo-400 text-white font-bold shadow-md" 
-                                                    : "bg-slate-950/60 border-slate-850 text-slate-400 hover:text-slate-200 hover:bg-slate-900"
-                                            }`}
-                                        >
-                                            <span>🗂️ {table}</span>
-                                            <ChevronRight className="w-3.5 h-3.5" />
-                                        </button>
-                                    ))}
+                                    {(() => {
+                                        const tableMetadata: Record<string, { icon: any; color: string; desc: string }> = {
+                                            users: { icon: User, color: "text-blue-400 bg-blue-500/10", desc: "Credentials & role control" },
+                                            passengers: { icon: UserCheck, color: "text-blue-400 bg-blue-500/10", desc: "Legal identities" },
+                                            passport_verifications: { icon: FileText, color: "text-sky-400 bg-sky-500/10", desc: "Passport OCR credentials" },
+                                            face_enrollments: { icon: Camera, color: "text-purple-400 bg-purple-500/10", desc: "Enrolled face data" },
+                                            face_verifications: { icon: Aperture, color: "text-purple-450 bg-purple-500/10", desc: "Biometric attempts history" },
+                                            flights: { icon: Globe, color: "text-amber-400 bg-amber-500/10", desc: "Aviation flight list catalog" },
+                                            boarding_passes: { icon: FileSpreadsheet, color: "text-amber-450 bg-amber-500/10", desc: "Traveler boarding passes" },
+                                            airport_entries: { icon: Lock, color: "text-rose-450 bg-rose-500/10", desc: "Terminal gate entrances" },
+                                            security_checks: { icon: Shield, color: "text-rose-400 bg-rose-500/10", desc: "Immigration risk logs" },
+                                            boarding_events: { icon: Activity, color: "text-rose-500 bg-rose-500/10", desc: "Aircraft boarding checks" },
+                                            travel_history: { icon: History, color: "text-slate-450 bg-slate-500/10", desc: "Passenger journey milestones" },
+                                            audit_logs: { icon: Layers, color: "text-slate-400 bg-slate-500/10", desc: "System transaction logs" },
+                                            notifications: { icon: Mail, color: "text-slate-500 bg-slate-500/10", desc: "User inbox messages queue" },
+                                            system_settings: { icon: SettingsIcon, color: "text-teal-400 bg-teal-500/10", desc: "Global config parameters" },
+                                            analytics: { icon: BarChart2, color: "text-teal-450 bg-teal-500/10", desc: "Daily compiled system stats" }
+                                        }
+
+                                        return [
+                                            "users", "passengers", "passport_verifications", "face_enrollments",
+                                            "face_verifications", "flights", "boarding_passes", "airport_entries",
+                                            "security_checks", "boarding_events", "travel_history", "audit_logs",
+                                            "notifications", "system_settings", "analytics"
+                                        ].map((table, idx) => {
+                                            const meta = tableMetadata[table] || { icon: Database, color: "text-slate-400 bg-slate-500/10", desc: "Data table relation" }
+                                            const TableIcon = meta.icon
+                                            const isSelected = explorerTable === table
+
+                                            return (
+                                                <button
+                                                    key={idx}
+                                                    onClick={() => setExplorerTable(table)}
+                                                    className={`w-full text-left p-2.5 rounded-xl transition-all border flex flex-col gap-1 ${
+                                                        isSelected 
+                                                            ? "bg-slate-900 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.15)] ring-1 ring-indigo-500/35" 
+                                                            : "bg-slate-950/60 border-slate-850 hover:bg-slate-900/80 hover:border-slate-800"
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center justify-between w-full">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className={`p-1.5 rounded-lg ${isSelected ? "bg-indigo-650/15 text-indigo-400" : meta.color}`}>
+                                                                <TableIcon className="w-3.5 h-3.5" />
+                                                            </div>
+                                                            <span className={`font-mono text-[10px] font-semibold ${isSelected ? "text-white font-bold" : "text-slate-350"}`}>{table}</span>
+                                                        </div>
+                                                        <ChevronRight className={`w-3 h-3 transition-transform ${isSelected ? "text-indigo-400 translate-x-0.5" : "text-slate-600"}`} />
+                                                    </div>
+                                                    <span className="text-[8px] text-slate-500 font-mono pl-7 leading-none">{meta.desc}</span>
+                                                </button>
+                                            )
+                                        })
+                                    })()}
                                 </div>
 
                                 <div className="lg:col-span-3 bg-slate-950 border border-slate-850 p-5 rounded-2xl space-y-4">

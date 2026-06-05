@@ -7,15 +7,34 @@ const FALLBACK_KEY = "sentinelgate_supabase_fallback"
 function getFallbackStore(): Record<string, any[]> {
     if (typeof window === "undefined") return {}
     const store = localStorage.getItem(FALLBACK_KEY)
-    if (!store) {
-        // Initialize default mock database tables for all 15 tables
+    let parsedStore: Record<string, any[]> = {}
+    if (store) {
+        try {
+            parsedStore = JSON.parse(store)
+        } catch (e) {
+            parsedStore = {}
+        }
+    }
+
+    if (!store || !parsedStore.passengers || parsedStore.passengers.length === 0) {
         const defaultStore: Record<string, any[]> = {
             users: [
-                { id: "admin-uid-12345", email: "admin@sentinelgate.gov", password: "AdminSecurityTopRisk04822", role: "admin", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+                { id: "admin-uid-12345", email: "admin@sentinelgate.gov", password: "AdminSecurityTopRisk04822", role: "admin", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+                { id: "user-sarah-123", email: "sarah@smarttravel.in", password: "Pass123", role: "passenger", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+                { id: "user-trump-123", email: "donald@trump.com", password: "Pass123", role: "passenger", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
             ],
-            passengers: [],
-            passport_verifications: [],
-            face_enrollments: [],
+            passengers: [
+                { id: "passenger-sarah-123", user_id: "user-sarah-123", name: "SARAH CONNOR", phone: "+91 9876543210", dob: "1990-05-15", nationality: "Indian", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+                { id: "passenger-trump-123", user_id: "user-trump-123", name: "DONALD TRUMP", phone: "+1 555-0199", dob: "1946-06-14", nationality: "United States", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+            ],
+            passport_verifications: [
+                { id: "passport-sarah-123", passenger_id: "passenger-sarah-123", passport_number: "J1234567", issuing_country: "India", expiry_date: "2035-12-31", ocr_status: "SUCCESS", verification_status: "VERIFIED", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+                { id: "passport-trump-123", passenger_id: "passenger-trump-123", passport_number: "W0000001", issuing_country: "United States", expiry_date: "2032-06-14", ocr_status: "SUCCESS", verification_status: "VERIFIED", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+            ],
+            face_enrollments: [
+                { id: "face-sarah-123", passenger_id: "passenger-sarah-123", selfie_url: "/mock_selfie.jpg", quality_score: 0.98, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+                { id: "face-trump-123", passenger_id: "passenger-trump-123", selfie_url: "/trump_target.jpg", quality_score: 0.99, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+            ],
             face_verifications: [],
             flights: [
                 { id: "f1", pnr: "PNR10293", flight_number: "SG-302", departure_airport: "DEL", arrival_airport: "JFK", travel_date: new Date().toISOString().split('T')[0], boarding_time: "19:30", gate: "Gate B12", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
@@ -23,7 +42,10 @@ function getFallbackStore(): Record<string, any[]> {
                 { id: "f3", pnr: "PNR84029", flight_number: "EK-503", departure_airport: "DXB", arrival_airport: "DEL", travel_date: new Date().toISOString().split('T')[0], boarding_time: "08:45", gate: "Gate A02", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
                 { id: "f4", pnr: "PNR74028", flight_number: "LH-760", departure_airport: "FRA", arrival_airport: "BLR", travel_date: new Date().toISOString().split('T')[0], boarding_time: "22:00", gate: "Gate B20", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
             ],
-            boarding_passes: [],
+            boarding_passes: [
+                { id: "bp-sarah-123", passenger_id: "passenger-sarah-123", flight_id: "f1", seat_number: "Seat 12A", class: "Economy", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+                { id: "bp-trump-123", passenger_id: "passenger-trump-123", flight_id: "f2", seat_number: "Seat 01F", class: "First", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+            ],
             airport_entries: [],
             security_checks: [],
             boarding_events: [],
@@ -52,7 +74,7 @@ function getFallbackStore(): Record<string, any[]> {
         localStorage.setItem(FALLBACK_KEY, JSON.stringify(defaultStore))
         return defaultStore
     }
-    return JSON.parse(store)
+    return parsedStore
 }
 
 function saveFallbackStore(store: Record<string, any[]>) {
@@ -63,7 +85,15 @@ function saveFallbackStore(store: Record<string, any[]>) {
 function isMissingTableError(error: any): boolean {
     if (!error) return false
     const msg = error.message || ""
-    return msg.includes("relation") || msg.includes("does not exist") || msg.includes("404") || msg.includes("PGRST116")
+    const code = error.code || ""
+    const status = error.status
+    return msg.includes("relation") || 
+           msg.includes("does not exist") || 
+           msg.includes("404") || 
+           msg.includes("PGRST116") ||
+           msg.includes("Could not find the table") ||
+           code === "PGRST205" ||
+           status === 404
 }
 
 // -------------------------------------------------------------
