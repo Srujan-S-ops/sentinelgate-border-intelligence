@@ -194,6 +194,8 @@ export default function Home() {
     const [cameraLogs, setCameraLogs] = useState<string[]>([])
     const [cameraMatchScore, setCameraMatchScore] = useState<number | null>(null)
     const [cameraSelfieUrl, setCameraSelfieUrl] = useState<string | null>(null)
+    const [livenessPassengerId, setLivenessPassengerId] = useState("")
+    const [livenessManualPassport, setLivenessManualPassport] = useState("")
 
     // SECURITY SCREENING VARIABLES
     const [screenPassengerId, setScreenPassengerId] = useState("")
@@ -205,6 +207,8 @@ export default function Home() {
 
     // BOARDING GATE VARIABLES
     const [boardPassengerId, setBoardPassengerId] = useState("")
+    const [boardManualPassport, setBoardManualPassport] = useState("")
+    const [boardManualPnr, setBoardManualPnr] = useState("")
     const [boardState, setBoardState] = useState<"idle" | "matching" | "cleared" | "completed" | "error">("idle")
     const [boardLogs, setBoardLogs] = useState<string[]>([])
 
@@ -212,6 +216,9 @@ export default function Home() {
     const [gateState, setGateState] = useState<"idle" | "scanning" | "matching" | "verifying" | "success" | "denied" | "alert">("idle")
     const [gateLogs, setGateLogs] = useState<string[]>([])
     const [gateMatchConfidence, setGateMatchConfidence] = useState<number | null>(null)
+    const [gatePassengerId, setGatePassengerId] = useState("")
+    const [gateManualPassport, setGateManualPassport] = useState("")
+    const [gateManualPnr, setGateManualPnr] = useState("")
 
     // DATABASE EXPLORER CRUD STATE
     const [explorerTable, setExplorerTable] = useState("passengers")
@@ -969,9 +976,17 @@ export default function Home() {
                 try {
                     let matchedPassenger = null
                     const passengers = await dbGetRows("passengers")
+                    const passports = await dbGetRows("passport_verifications")
 
                     if (profileData) {
                         matchedPassenger = profileData.passenger
+                    } else if (livenessPassengerId) {
+                        matchedPassenger = passengers.find(p => p.id === livenessPassengerId)
+                    } else if (livenessManualPassport) {
+                        const passRecord = passports.find(p => p.passport_number.toUpperCase() === livenessManualPassport.toUpperCase().trim())
+                        if (passRecord) {
+                            matchedPassenger = passengers.find(p => p.id === passRecord.passenger_id)
+                        }
                     } else if (passengers.length > 0) {
                         matchedPassenger = passengers[passengers.length - 1]
                     }
@@ -1051,7 +1066,24 @@ export default function Home() {
                     const passports = await dbGetRows("passport_verifications")
                     const boardingPasses = await dbGetRows("boarding_passes")
 
-                    let activeMatch = profileData ? profileData.passenger : (passengers.length > 0 ? passengers[passengers.length - 1] : null)
+                    let activeMatch = null
+                    if (profileData) {
+                        activeMatch = profileData.passenger
+                    } else if (gatePassengerId) {
+                        activeMatch = passengers.find(p => p.id === gatePassengerId)
+                    } else if (gateManualPassport) {
+                        const passRecord = passports.find(p => p.passport_number.toUpperCase() === gateManualPassport.toUpperCase().trim())
+                        if (passRecord) {
+                            activeMatch = passengers.find(p => p.id === passRecord.passenger_id)
+                        }
+                    } else if (gateManualPnr) {
+                        const bpRecord = boardingPasses.find(b => b.pnr.toUpperCase() === gateManualPnr.toUpperCase().trim())
+                        if (bpRecord) {
+                            activeMatch = passengers.find(p => p.id === bpRecord.passenger_id)
+                        }
+                    } else if (passengers.length > 0) {
+                        activeMatch = passengers[passengers.length - 1]
+                    }
 
                     if (!activeMatch) {
                         setGateState("denied")
@@ -1157,7 +1189,25 @@ export default function Home() {
                 const passengers = await dbGetRows("passengers")
                 const boardingPasses = await dbGetRows("boarding_passes")
 
-                let boardUser = profileData ? profileData.passenger : (passengers.length > 0 ? passengers[passengers.length - 1] : null)
+                let boardUser = null
+                const passports = await dbGetRows("passport_verifications")
+                if (profileData) {
+                    boardUser = profileData.passenger
+                } else if (boardPassengerId) {
+                    boardUser = passengers.find(p => p.id === boardPassengerId)
+                } else if (boardManualPassport) {
+                    const passRecord = passports.find(p => p.passport_number.toUpperCase() === boardManualPassport.toUpperCase().trim())
+                    if (passRecord) {
+                        boardUser = passengers.find(p => p.id === passRecord.passenger_id)
+                    }
+                } else if (boardManualPnr) {
+                    const bpRecord = boardingPasses.find(b => b.pnr.toUpperCase() === boardManualPnr.toUpperCase().trim())
+                    if (bpRecord) {
+                        boardUser = passengers.find(p => p.id === bpRecord.passenger_id)
+                    }
+                } else if (passengers.length > 0) {
+                    boardUser = passengers[passengers.length - 1]
+                }
 
                 if (!boardUser) {
                     setBoardState("error")
@@ -1685,13 +1735,37 @@ export default function Home() {
 
                                 <div className="flex flex-col md:flex-row gap-8 items-center">
                                     <div className="flex flex-col items-center justify-center p-6 bg-slate-950/60 border border-slate-850 rounded-2xl w-44 text-center shrink-0">
-                                        <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-center mb-3">
-                                            <UserCheck className="w-6 h-6 text-emerald-400" />
-                                        </div>
-                                        <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">E-Gate Entry Status</span>
-                                        <span className="text-emerald-400 font-black text-xs uppercase tracking-widest mt-1 block font-mono">
-                                            AUTHORIZED
-                                        </span>
+                                        {profileData?.boardingPass?.egate_status === "VERIFIED" ? (
+                                            <>
+                                                <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-center mb-3">
+                                                    <Check className="w-6 h-6 text-emerald-400" />
+                                                </div>
+                                                <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">E-Gate Entry Status</span>
+                                                <span className="text-emerald-400 font-black text-xs uppercase tracking-widest mt-1 block font-mono">
+                                                    CLEARED
+                                                </span>
+                                            </>
+                                        ) : profileData?.boardingPass?.egate_status === "DENIED" ? (
+                                            <>
+                                                <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/40 flex items-center justify-center mb-3">
+                                                    <X className="w-6 h-6 text-rose-400" />
+                                                </div>
+                                                <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">E-Gate Entry Status</span>
+                                                <span className="text-rose-400 font-black text-xs uppercase tracking-widest mt-1 block font-mono">
+                                                    DENIED
+                                                </span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-center mb-3">
+                                                    <UserCheck className="w-6 h-6 text-emerald-400" />
+                                                </div>
+                                                <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">E-Gate Entry Status</span>
+                                                <span className="text-emerald-400 font-black text-xs uppercase tracking-widest mt-1 block font-mono">
+                                                    AUTHORIZED
+                                                </span>
+                                            </>
+                                        )}
                                     </div>
 
                                     <div className="flex-1 w-full space-y-4">
@@ -1728,16 +1802,46 @@ export default function Home() {
                                             <button onClick={() => alert("SmartYatra Pass spooled.")} className="flex-1 bg-slate-850 hover:bg-slate-800 text-slate-300 py-2 rounded-xl text-xs font-bold border border-slate-800 flex items-center justify-center gap-1">
                                                 <Printer className="w-3.5 h-3.5" /> Print Pass
                                             </button>
-                                            <button 
-                                                onClick={() => {
-                                                    setActiveModule("entry");
-                                                    setGateLogs([]);
-                                                    setGateState("idle");
-                                                }}
-                                                className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all"
-                                            >
-                                                Proceed to E-Gate Entry
-                                            </button>
+                                            {passengerStage === 5 && (
+                                                <button 
+                                                    onClick={() => {
+                                                        setActiveModule("entry");
+                                                        setGateLogs([]);
+                                                        setGateState("idle");
+                                                    }}
+                                                    className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all"
+                                                >
+                                                    Proceed to E-Gate Entry
+                                                </button>
+                                            )}
+                                            {passengerStage === 6 && (
+                                                <button 
+                                                    disabled
+                                                    className="flex-1 bg-slate-850 text-slate-500 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-not-allowed border border-slate-700"
+                                                >
+                                                    <Clock className="w-3.5 h-3.5 text-amber-500 animate-spin-slow" /> Awaiting Security Check
+                                                </button>
+                                            )}
+                                            {passengerStage === 7 && (
+                                                <button 
+                                                    onClick={() => {
+                                                        setActiveModule("boarding");
+                                                        setBoardLogs([]);
+                                                        setBoardState("idle");
+                                                    }}
+                                                    className="flex-1 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all"
+                                                >
+                                                    Proceed to Boarding Gate
+                                                </button>
+                                            )}
+                                            {passengerStage === 8 && (
+                                                <button 
+                                                    disabled
+                                                    className="flex-1 bg-emerald-950/40 text-emerald-400 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border border-emerald-500/20"
+                                                >
+                                                    <Check className="w-3.5 h-3.5" /> Boarding Completed
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -2119,7 +2223,7 @@ export default function Home() {
                 <div className="flex-1 p-6 md:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
                     
                     {/* RENDER MODULES */}
-                    {authRole === "user" ? (
+                    {(authRole === "user" && activeModule !== "entry" && activeModule !== "boarding") ? (
                         renderPassengerPortal()
                     ) : (
                         <>
@@ -2280,6 +2384,42 @@ export default function Home() {
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <div className="space-y-4">
+                                        {authRole === "admin" && (
+                                            <div className="bg-slate-950 border border-slate-850 p-4 rounded-xl space-y-3 font-mono text-xs">
+                                                <div className="text-[10px] text-slate-505 font-bold uppercase tracking-widest border-b border-slate-900 pb-1">Select Identity (Simulate Scan)</div>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label className="text-[10px] text-slate-400 block mb-1">Select Passenger</label>
+                                                        <select 
+                                                            value={livenessPassengerId} 
+                                                            onChange={(e) => {
+                                                                setLivenessPassengerId(e.target.value)
+                                                                setLivenessManualPassport("")
+                                                            }}
+                                                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-white"
+                                                        >
+                                                            <option value="">-- Choose Passenger --</option>
+                                                            {travelers.map((t, idx) => (
+                                                                <option key={idx} value={t.id}>{t.name.toUpperCase()}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] text-slate-400 block mb-1">Or Enter Passport No.</label>
+                                                        <input 
+                                                            type="text" 
+                                                            value={livenessManualPassport}
+                                                            onChange={(e) => {
+                                                                setLivenessManualPassport(e.target.value)
+                                                                setLivenessPassengerId("")
+                                                            }}
+                                                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white uppercase"
+                                                            placeholder="E.g. J1234567"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                         <div className="relative w-full h-64 bg-black rounded-2xl overflow-hidden border border-slate-850 flex items-center justify-center">
                                             <Webcam ref={matchCamRef} audio={false} screenshotFormat="image/jpeg" videoConstraints={{ facingMode: "user" }} className="w-full h-full object-cover" />
                                             {cameraState === "scanning" && (
@@ -2424,6 +2564,58 @@ export default function Home() {
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <div className="space-y-4">
+                                        {authRole === "admin" && (
+                                            <div className="bg-slate-950 border border-slate-850 p-4 rounded-xl space-y-3 font-mono text-xs">
+                                                <div className="text-[10px] text-slate-505 font-bold uppercase tracking-widest border-b border-slate-900 pb-1">Select Identity (Simulate Scan)</div>
+                                                <div className="grid grid-cols-3 gap-3">
+                                                    <div>
+                                                        <label className="text-[10px] text-slate-400 block mb-1">Select Passenger</label>
+                                                        <select 
+                                                            value={gatePassengerId} 
+                                                            onChange={(e) => {
+                                                                setGatePassengerId(e.target.value)
+                                                                setGateManualPassport("")
+                                                                setGateManualPnr("")
+                                                            }}
+                                                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-white"
+                                                        >
+                                                            <option value="">-- Choose Passenger --</option>
+                                                            {travelers.map((t, idx) => (
+                                                                <option key={idx} value={t.id}>{t.name.toUpperCase()}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] text-slate-400 block mb-1">Passport No.</label>
+                                                        <input 
+                                                            type="text" 
+                                                            value={gateManualPassport}
+                                                            onChange={(e) => {
+                                                                setGateManualPassport(e.target.value)
+                                                                setGatePassengerId("")
+                                                                setGateManualPnr("")
+                                                            }}
+                                                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white uppercase"
+                                                            placeholder="E.g. J1234567"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] text-slate-400 block mb-1">Booking PNR</label>
+                                                        <input 
+                                                            type="text" 
+                                                            value={gateManualPnr}
+                                                            onChange={(e) => {
+                                                                setGateManualPnr(e.target.value)
+                                                                setGatePassengerId("")
+                                                                setGateManualPassport("")
+                                                            }}
+                                                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white uppercase"
+                                                            placeholder="E.g. PNR10293"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                         <div className="relative w-full h-64 bg-black rounded-2xl overflow-hidden border border-slate-850">
                                             <Webcam ref={gateCamRef} audio={false} screenshotFormat="image/jpeg" videoConstraints={{ facingMode: "user" }} className="w-full h-full object-cover" />
                                             {(gateState === "scanning" || gateState === "matching") && (
@@ -2660,6 +2852,58 @@ export default function Home() {
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <div className="space-y-4">
+                                        {authRole === "admin" && (
+                                            <div className="bg-slate-950 border border-slate-850 p-4 rounded-xl space-y-3 font-mono text-xs">
+                                                <div className="text-[10px] text-slate-505 font-bold uppercase tracking-widest border-b border-slate-900 pb-1">Select Identity (Simulate Scan)</div>
+                                                <div className="grid grid-cols-3 gap-3">
+                                                    <div>
+                                                        <label className="text-[10px] text-slate-400 block mb-1">Select Passenger</label>
+                                                        <select 
+                                                            value={boardPassengerId} 
+                                                            onChange={(e) => {
+                                                                setBoardPassengerId(e.target.value)
+                                                                setBoardManualPassport("")
+                                                                setBoardManualPnr("")
+                                                            }}
+                                                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-white"
+                                                        >
+                                                            <option value="">-- Choose Passenger --</option>
+                                                            {travelers.map((t, idx) => (
+                                                                <option key={idx} value={t.id}>{t.name.toUpperCase()}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] text-slate-400 block mb-1">Passport No.</label>
+                                                        <input 
+                                                            type="text" 
+                                                            value={boardManualPassport}
+                                                            onChange={(e) => {
+                                                                setBoardManualPassport(e.target.value)
+                                                                setBoardPassengerId("")
+                                                                setBoardManualPnr("")
+                                                            }}
+                                                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white uppercase"
+                                                            placeholder="E.g. J1234567"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] text-slate-400 block mb-1">Booking PNR</label>
+                                                        <input 
+                                                            type="text" 
+                                                            value={boardManualPnr}
+                                                            onChange={(e) => {
+                                                                setBoardManualPnr(e.target.value)
+                                                                setBoardPassengerId("")
+                                                                setBoardManualPassport("")
+                                                            }}
+                                                            className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-white uppercase"
+                                                            placeholder="E.g. PNR10293"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                         <div className="relative w-full h-64 bg-black rounded-2xl overflow-hidden border border-slate-850 flex items-center justify-center">
                                             <Webcam ref={boardCamRef} audio={false} screenshotFormat="image/jpeg" videoConstraints={{ facingMode: "user" }} className="w-full h-full object-cover" />
                                             {boardState === "matching" && (
