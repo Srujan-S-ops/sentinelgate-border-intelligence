@@ -776,6 +776,33 @@ export default function Home() {
         return Math.min(Math.round(finalScore), 100)
     }
 
+    const handleViewTravelerDetails = async (passengerId: string) => {
+        try {
+            const passengers = await dbGetRows("passengers")
+            const passenger = passengers.find(p => p.id === passengerId)
+            if (!passenger) return
+
+            const passports = await dbGetRows("passport_verifications")
+            const passport = passports.find(p => p.passenger_id === passengerId)
+
+            const boardingPasses = await dbGetRows("boarding_passes")
+            const boardingPass = boardingPasses.find(bp => bp.passenger_id === passengerId)
+
+            const faceEnrollments = await dbGetRows("face_enrollments")
+            const faceEnrollment = faceEnrollments.find(fe => fe.passenger_id === passengerId)
+
+            setSelectedTravelerDetail({
+                passenger,
+                passport,
+                boardingPass,
+                faceEnrollment
+            })
+            setShowDetailModal(true)
+        } catch (e) {
+            console.error("Error fetching traveler details:", e)
+        }
+    }
+
     // -------------------------------------------------------------
     // PASSPORT VERIFICATION ACTIONS
     // -------------------------------------------------------------
@@ -1498,6 +1525,42 @@ export default function Home() {
                                 )}
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                {/* Passengers Directory */}
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">
+                    <div className="flex items-center justify-between mb-6 border-b border-slate-800 pb-3">
+                        <div className="flex items-center gap-3">
+                            <UserCheck className="w-5 h-5 text-indigo-400" />
+                            <h3 className="text-sm font-extrabold text-white uppercase tracking-widest font-mono">Travelers Command Registry</h3>
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-mono">Total Registered: {travelers.length}</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {travelers.map((t, idx) => (
+                            <div 
+                                key={idx} 
+                                onClick={() => handleViewTravelerDetails(t.id)}
+                                className="bg-slate-950 hover:bg-slate-850/50 border border-slate-850 hover:border-indigo-500/30 p-4 rounded-2xl cursor-pointer transition-all flex items-center justify-between group shadow-sm"
+                            >
+                                <div className="space-y-1 max-w-[80%]">
+                                    <div className="font-bold text-xs text-white uppercase group-hover:text-indigo-400 transition-colors truncate">{t.name}</div>
+                                    <div className="text-[9px] text-slate-500 font-mono truncate">Passport: {t.passport}</div>
+                                    <div className="text-[9px] text-slate-500 font-mono truncate">Flight: {t.flightNo}</div>
+                                </div>
+                                <span className={`px-2 py-0.5 rounded text-[8px] font-mono font-bold shrink-0 ${
+                                    t.risk >= 70 
+                                        ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" 
+                                        : t.risk >= 40 
+                                            ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" 
+                                            : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                }`}>
+                                    {t.status}
+                                </span>
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>
@@ -3345,6 +3408,204 @@ export default function Home() {
 
                 </div>
             </main>
+
+            {/* TRAVELER DETAILS MODAL */}
+            {showDetailModal && selectedTravelerDetail && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in-up">
+                    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl max-w-2xl w-full space-y-6 relative overflow-hidden">
+                        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
+                        
+                        <div className="flex justify-between items-start border-b border-slate-850 pb-4">
+                            <div>
+                                <span className="text-[10px] text-indigo-400 font-mono font-bold tracking-widest uppercase block mb-1">Traveler Command Profile</span>
+                                <h3 className="text-lg font-black text-white uppercase tracking-wider">{selectedTravelerDetail.passenger.name}</h3>
+                            </div>
+                            <button 
+                                type="button" 
+                                onClick={() => {
+                                    setShowDetailModal(false)
+                                    setSelectedTravelerDetail(null)
+                                }} 
+                                className="text-slate-400 hover:text-slate-200 p-1 bg-slate-950/50 border border-slate-850 hover:border-slate-800 rounded-lg transition-all"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto max-h-[480px] pr-2 font-mono text-xs text-slate-300">
+                            {/* Card 1: Identity & Security */}
+                            <div className="bg-slate-950 border border-slate-850 p-4.5 rounded-2xl space-y-3">
+                                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider border-b border-slate-900 pb-1.5 flex items-center gap-1.5">
+                                    <User className="w-3.5 h-3.5 text-indigo-400" /> Identity & Security
+                                </div>
+                                <div className="space-y-2">
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">NATIONALITY:</span>
+                                        <span className="text-white font-bold">{selectedTravelerDetail.passenger.nationality}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">PHONE:</span>
+                                        <span className="text-white">{selectedTravelerDetail.passenger.phone || "N/A"}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">DATE OF BIRTH:</span>
+                                        <span className="text-white">{selectedTravelerDetail.passenger.dob || "N/A"}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">RISK INDEX:</span>
+                                        <span className={`font-bold ${
+                                            selectedTravelerDetail.passenger.security_score >= 70 ? "text-rose-400" : selectedTravelerDetail.passenger.security_score >= 40 ? "text-amber-400" : "text-emerald-400"
+                                        }`}>{selectedTravelerDetail.passenger.security_score}%</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">RISK STATUS:</span>
+                                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                            selectedTravelerDetail.passenger.security_status === "HIGH RISK" ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" : selectedTravelerDetail.passenger.security_status === "SECONDARY CHECK" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                        }`}>{selectedTravelerDetail.passenger.security_status}</span>
+                                    </div>
+                                    <div className="pt-2 border-t border-slate-900/50">
+                                        <span className="text-slate-500 block mb-1 text-[10px]">SECURITY NOTES:</span>
+                                        <p className="text-[10px] text-slate-400 bg-slate-900/60 p-2 rounded border border-slate-850 leading-relaxed">{selectedTravelerDetail.passenger.security_notes || "No threat notes identified."}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Card 2: Passport Document OCR */}
+                            <div className="bg-slate-950 border border-slate-850 p-4.5 rounded-2xl space-y-3">
+                                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider border-b border-slate-900 pb-1.5 flex items-center gap-1.5">
+                                    <FileText className="w-3.5 h-3.5 text-amber-500" /> Passport Verification
+                                </div>
+                                {selectedTravelerDetail.passport ? (
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500">PASSPORT NO:</span>
+                                            <span className="text-white font-bold">{selectedTravelerDetail.passport.passport_number}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500">ISSUING COUNTRY:</span>
+                                            <span className="text-white uppercase">{selectedTravelerDetail.passport.issuing_country}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500">EXPIRY DATE:</span>
+                                            <span className="text-white">{selectedTravelerDetail.passport.expiry_date}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500">OCR SCAN:</span>
+                                            <span className="text-emerald-400 font-bold">{selectedTravelerDetail.passport.ocr_status}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500">IMMIGRATION VERIFY:</span>
+                                            <span className={`font-bold ${selectedTravelerDetail.passport.verification_status === "VERIFIED" ? "text-emerald-400" : "text-amber-500"}`}>{selectedTravelerDetail.passport.verification_status}</span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-8 text-slate-600 text-[10px]">Passport document not scanned or uploaded yet.</div>
+                                )}
+                            </div>
+
+                            {/* Card 3: Flight Voyage Pass */}
+                            <div className="bg-slate-950 border border-slate-850 p-4.5 rounded-2xl space-y-3 md:col-span-2">
+                                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider border-b border-slate-900 pb-1.5 flex items-center gap-1.5">
+                                    <Globe className="w-3.5 h-3.5 text-indigo-400" /> Flight & Journey Details
+                                </div>
+                                {selectedTravelerDetail.boardingPass ? (
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">FLIGHT ID:</span>
+                                                <span className="text-white font-bold">{selectedTravelerDetail.boardingPass.flight_number}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-505">PNR CODE:</span>
+                                                <span className="text-white font-bold uppercase">{selectedTravelerDetail.boardingPass.pnr}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">ROUTE:</span>
+                                                <span className="text-white font-bold">{selectedTravelerDetail.boardingPass.departure_airport} ➔ {selectedTravelerDetail.boardingPass.arrival_airport}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-505">DATE:</span>
+                                                <span className="text-white">{selectedTravelerDetail.boardingPass.travel_date}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">BOARDING TIME:</span>
+                                                <span className="text-white">{selectedTravelerDetail.boardingPass.boarding_time}</span>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-505">GATE LOCATION:</span>
+                                                <span className="text-white font-bold">{selectedTravelerDetail.boardingPass.gate}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">SEAT ASSIGNMENT:</span>
+                                                <span className="text-white font-bold">{selectedTravelerDetail.boardingPass.seat_number} ({selectedTravelerDetail.boardingPass.class})</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-505">E-GATE STATUS:</span>
+                                                <span className={`font-bold ${selectedTravelerDetail.boardingPass.egate_status === "VERIFIED" ? "text-emerald-400" : "text-amber-505"}`}>{selectedTravelerDetail.boardingPass.egate_status}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">BOARDING STATUS:</span>
+                                                <span className={`font-bold ${selectedTravelerDetail.boardingPass.boarding_status === "BOARDED" ? "text-emerald-400" : "text-amber-505"}`}>{selectedTravelerDetail.boardingPass.boarding_status}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-8 text-slate-600 text-[10px]">Flight voyage journey details not linked.</div>
+                                )}
+                            </div>
+
+                            {/* Card 4: Biometrics Status */}
+                            <div className="bg-slate-950 border border-slate-850 p-4.5 rounded-2xl space-y-3 md:col-span-2">
+                                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider border-b border-slate-900 pb-1.5 flex items-center gap-1.5">
+                                    <Camera className="w-3.5 h-3.5 text-purple-400" /> Biometric Face Onboarding
+                                </div>
+                                {selectedTravelerDetail.faceEnrollment ? (
+                                    <div className="flex flex-col sm:flex-row gap-4 items-center">
+                                        <div className="w-20 h-20 rounded-full border border-slate-850 overflow-hidden shrink-0 bg-slate-900 flex items-center justify-center">
+                                            {selectedTravelerDetail.faceEnrollment.selfie_url ? (
+                                                <img src={selectedTravelerDetail.faceEnrollment.selfie_url} alt="Selfie profile" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <User className="w-8 h-8 text-slate-600" />
+                                            )}
+                                        </div>
+                                        <div className="flex-1 w-full grid grid-cols-2 gap-x-4 gap-y-2">
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">LIVENESS CHECKS:</span>
+                                                <span className="text-emerald-400 font-bold">{selectedTravelerDetail.faceEnrollment.liveness_status}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">QUALITY INDEX:</span>
+                                                <span className="text-emerald-400 font-bold">{(selectedTravelerDetail.faceEnrollment.quality_score * 100).toFixed(1)}%</span>
+                                            </div>
+                                            <div className="flex justify-between col-span-2">
+                                                <span className="text-slate-500">BIOMETRIC VECTOR DESC:</span>
+                                                <span className="text-slate-400 truncate max-w-[200px]" title={selectedTravelerDetail.faceEnrollment.face_descriptor}>{selectedTravelerDetail.faceEnrollment.face_descriptor}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-8 text-slate-600 text-[10px]">Face biometrics details not enrolled in database registry.</div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="pt-2">
+                            <button 
+                                type="button" 
+                                onClick={() => {
+                                    setShowDetailModal(false)
+                                    setSelectedTravelerDetail(null)
+                                }} 
+                                className="w-full bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-white py-2.5 rounded-xl text-xs uppercase font-bold tracking-widest font-mono border border-slate-800 transition-colors"
+                            >
+                                Close Command View
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* DATABASE EXPLORER CRUD INSERT MODAL */}
             {showInsertModal && (
