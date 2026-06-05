@@ -199,6 +199,8 @@ export default function Home() {
     const [screenRiskScore, setScreenRiskScore] = useState(20)
     const [screenStatus, setScreenStatus] = useState("SAFE")
     const [screenNotes, setScreenNotes] = useState("")
+    const [isSavingRisk, setIsSavingRisk] = useState(false)
+    const [riskSavedSuccess, setRiskSavedSuccess] = useState(false)
 
     // BOARDING GATE VARIABLES
     const [boardPassengerId, setBoardPassengerId] = useState("")
@@ -1064,9 +1066,15 @@ export default function Home() {
     // CAMERA VERIFICATION MODULE (LIVENESS SCANNERS)
     // -------------------------------------------------------------
     const runCameraLivenessMatchCheck = async () => {
-        if (cameraState !== "idle") return
+        if (cameraState === "scanning" || cameraState === "matching") {
+            return
+        }
+
         setCameraLogs([])
+        setCameraMatchScore(null)
+        setCameraSelfieUrl(null)
         setCameraState("scanning")
+
         const addLog = (m: string) => setCameraLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${m}`])
 
         addLog("🛡️ Accessing border camera feed...")
@@ -1080,53 +1088,59 @@ export default function Home() {
             setCameraSelfieUrl(screenshot || "/mock_selfie.jpg")
 
             setTimeout(async () => {
-                let matchedPassenger = null
-                const passengers = await dbGetRows("passengers")
-                const checks = await dbGetRows("security_checks")
+                try {
+                    let matchedPassenger = null
+                    const passengers = await dbGetRows("passengers")
+                    const checks = await dbGetRows("security_checks")
 
-                if (profileData) {
-                    matchedPassenger = profileData.passenger
-                } else if (passengers.length > 0) {
-                    matchedPassenger = passengers[passengers.length - 1]
-                }
+                    if (profileData) {
+                        matchedPassenger = profileData.passenger
+                    } else if (passengers.length > 0) {
+                        matchedPassenger = passengers[passengers.length - 1]
+                    }
 
-                if (!matchedPassenger) {
+                    if (!matchedPassenger) {
+                        setCameraState("failed")
+                        addLog("🔴 SCAN FAILED: Profile not found in database registry.")
+                        return
+                    }
+
+                    const check = checks.find(c => c.passenger_id === matchedPassenger.id)
+                    const riskScore = check?.risk_score || 20
+
+                    if (riskScore >= 70) {
+                        setCameraState("failed")
+                        addLog(`🚨 POLICE INTERCEPT ACTIVE: Match found for high-risk traveler ${matchedPassenger.name.toUpperCase()}!`)
+                        return
+                    }
+
+                    setCameraState("success")
+                    setCameraMatchScore(98.4)
+                    addLog(`🟢 MATCH SUCCESS: Verified Passenger identity "${matchedPassenger.name.toUpperCase()}"`)
+                    addLog(`🟢 Confidence rating: 98.4% (Threshold: 90.0% Passed)`)
+
+                    // Log audit & verification
+                    await dbInsertRow("face_verifications", {
+                        passenger_id: matchedPassenger.id,
+                        match_confidence: 98.4,
+                        status: "APPROVED",
+                        captured_selfie_url: screenshot || "/mock_selfie.jpg"
+                    })
+
+                    await dbInsertRow("audit_logs", {
+                        user_id: currentUserId,
+                        action: "FACE_VERIFY",
+                        actor: matchedPassenger.name,
+                        status: "SUCCESS",
+                        description: "Biometric webcam match verification: Approved with 98.4% score."
+                    })
+
+                    syncSystemData()
+                } catch (error) {
+                    console.error("Camera liveness matcher failed:", error)
                     setCameraState("failed")
-                    addLog("🔴 SCAN FAILED: Profile not found in database registry.")
-                    return
+                    addLog("🔴 SCAN ERROR: Failed to finalize biometric analysis.")
                 }
-
-                const check = checks.find(c => c.passenger_id === matchedPassenger.id)
-                const riskScore = check?.risk_score || 20
-
-                if (riskScore >= 70) {
-                    setCameraState("failed")
-                    addLog(`🚨 POLICE INTERCEPT ACTIVE: Match found for high-risk traveler ${matchedPassenger.name.toUpperCase()}!`)
-                    return
-                }
-
-                setCameraState("success")
-                setCameraMatchScore(98.4)
-                addLog(`🟢 MATCH SUCCESS: Verified Passenger identity "${matchedPassenger.name.toUpperCase()}"`)
-                addLog(`🟢 Confidence rating: 98.4% (Threshold: 90.0% Passed)`)
-
-                // Log audit & verification
-                await dbInsertRow("face_verifications", {
-                    passenger_id: matchedPassenger.id,
-                    match_confidence: 98.4,
-                    status: "APPROVED",
-                    captured_selfie_url: screenshot || "/mock_selfie.jpg"
-                })
-
-                await dbInsertRow("audit_logs", {
-                    user_id: currentUserId,
-                    action: "FACE_VERIFY",
-                    actor: matchedPassenger.name,
-                    status: "SUCCESS",
-                    description: "Biometric webcam match verification: Approved with 98.4% score."
-                })
-
-                syncSystemData()
             }, 1500)
         }, 1500)
     }
@@ -1135,16 +1149,14 @@ export default function Home() {
     // AIRPORT GATE ENTRY SIMULATION ACTIONS
     // -------------------------------------------------------------
     const runGateClearanceSimulation = async () => {
-        if (gateState === "success" || gateState === "denied" || gateState === "alert") {
-            setGateLogs([])
-            setGateMatchConfidence(null)
-            setGateState("idle")
-            addTerminalLog("E-Gate simulator reset. Standing by...")
+        if (gateState === "scanning" || gateState === "matching" || gateState === "verifying") {
             return
         }
-        if (gateState !== "idle") return
+
         setGateLogs([])
+        setGateMatchConfidence(null)
         setGateState("scanning")
+
         const addLog = (m: string) => setGateLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${m}`])
 
         addLog("🚦 Launching automated e-gate sensor scanners...")
@@ -1155,91 +1167,108 @@ export default function Home() {
             const screenshot = gateCamRef.current?.getScreenshot()
 
             setTimeout(async () => {
-                setGateState("verifying")
-                addLog("🧬 Accessing face_enrollments secure credentials...")
+                try {
+                    setGateState("verifying")
+                    addLog("🧬 Accessing face_enrollments secure credentials...")
 
-                const passengers = await dbGetRows("passengers")
-                const passports = await dbGetRows("passport_verifications")
-                const boardingPasses = await dbGetRows("boarding_passes")
-                const flights = await dbGetRows("flights")
-                const checks = await dbGetRows("security_checks")
+                    const passengers = await dbGetRows("passengers")
+                    const passports = await dbGetRows("passport_verifications")
+                    const boardingPasses = await dbGetRows("boarding_passes")
+                    const flights = await dbGetRows("flights")
+                    const checks = await dbGetRows("security_checks")
 
-                let activeMatch = profileData ? profileData.passenger : (passengers.length > 0 ? passengers[passengers.length - 1] : null)
+                    let activeMatch = profileData ? profileData.passenger : (passengers.length > 0 ? passengers[passengers.length - 1] : null)
 
-                if (!activeMatch) {
-                    setGateState("denied")
-                    addLog("🔴 ACCESS DENIED: Account identity not registered.")
-                    return
-                }
-
-                const pass = passports.find(p => p.passenger_id === activeMatch.id)
-                const bp = boardingPasses.find(b => b.passenger_id === activeMatch.id)
-                const flight = bp ? flights.find(f => f.id === bp.flight_id) : null
-                const check = checks.find(c => c.passenger_id === activeMatch.id)
-                const risk = check?.risk_score || 20
-
-                addLog(`👤 Matched passenger: ${activeMatch.name.toUpperCase()}`)
-                
-                if (!pass) {
-                    setGateState("denied")
-                    addLog("🔴 ACCESS DENIED: Passport verification pending.")
-                    return
-                }
-
-                addLog(`🛂 Passport record verified: ${pass.passport_number}`)
-
-                setTimeout(async () => {
-                    if (!bp || !flight) {
+                    if (!activeMatch) {
                         setGateState("denied")
-                        addLog("🔴 ACCESS DENIED: Flight journey or ticket details missing.")
+                        addLog("🔴 ACCESS DENIED: Account identity not registered.")
                         return
                     }
 
-                    addLog(`🎫 Flight ticket validated: ${flight.flight_number} PNR: ${flight.pnr}`)
+                    const pass = passports.find(p => p.passenger_id === activeMatch.id)
+                    const bp = boardingPasses.find(b => b.passenger_id === activeMatch.id)
+                    const flight = bp ? flights.find(f => f.id === bp.flight_id) : null
+                    const check = checks.find(c => c.passenger_id === activeMatch.id)
+                    const risk = check?.risk_score || 20
+
+                    addLog(`👤 Matched passenger: ${activeMatch.name.toUpperCase()}`)
+                    
+                    if (!pass) {
+                        setGateState("denied")
+                        addLog("🔴 ACCESS DENIED: Passport verification pending.")
+                        return
+                    }
+
+                    addLog(`🛂 Passport record verified: ${pass.passport_number}`)
 
                     setTimeout(async () => {
-                        if (risk >= 70 || WATCHLIST.some(w => w.name === activeMatch.name.toUpperCase())) {
-                            setGateState("alert")
-                            addLog("🚨 ALARM INTRUSION: Watchlist police intercept triggered!")
+                        try {
+                            if (!bp || !flight) {
+                                setGateState("denied")
+                                addLog("🔴 ACCESS DENIED: Flight journey or ticket details missing.")
+                                return
+                            }
 
-                            await dbInsertRow("airport_entries", {
-                                passenger_id: activeMatch.id,
-                                boarding_pass_id: bp.id,
-                                verification_status: "DENIED",
-                                entry_gate: "EGATE-A1"
-                            })
-                            syncSystemData()
-                            return
+                            addLog(`🎫 Flight ticket validated: ${flight.flight_number} PNR: ${flight.pnr}`)
+
+                            setTimeout(async () => {
+                                try {
+                                    if (risk >= 70 || WATCHLIST.some(w => w.name === activeMatch.name.toUpperCase())) {
+                                        setGateState("alert")
+                                        addLog("🚨 ALARM INTRUSION: Watchlist police intercept triggered!")
+
+                                        await dbInsertRow("airport_entries", {
+                                            passenger_id: activeMatch.id,
+                                            boarding_pass_id: bp.id,
+                                            verification_status: "DENIED",
+                                            entry_gate: "EGATE-A1"
+                                        })
+                                        syncSystemData()
+                                        return
+                                    }
+
+                                    setGateState("success")
+                                    setGateMatchConfidence(97.8)
+                                    addLog("🟢 CLEARANCE CONFIRMED. COMPLIANCE ENTRANCE OPENED.")
+
+                                    await dbInsertRow("airport_entries", {
+                                        passenger_id: activeMatch.id,
+                                        boarding_pass_id: bp.id,
+                                        verification_status: "VERIFIED",
+                                        entry_gate: "EGATE-A1"
+                                    })
+                                    await logTravelHistory(activeMatch.id, "EGATE_CLEARED", "EGATE-A1")
+
+                                    // Audit
+                                    await dbInsertRow("audit_logs", {
+                                        user_id: currentUserId,
+                                        action: "GATE_ENTRY",
+                                        actor: activeMatch.name,
+                                        status: "SUCCESS",
+                                        description: `Authorized e-gate entry clearance. Gate: EGATE-A1, Score: 97.8%`
+                                    })
+
+                                    if (currentUserId) {
+                                        await loadPassengerProfile(currentUserId)
+                                    }
+                                    syncSystemData()
+                                } catch (error) {
+                                    console.error("Gate simulation stage 3 failed:", error)
+                                    setGateState("denied")
+                                    addLog("🔴 ACCESS ERROR: Entry approval logs storage failed.")
+                                }
+                            }, 1200)
+                        } catch (error) {
+                            console.error("Gate simulation stage 2 failed:", error)
+                            setGateState("denied")
+                            addLog("🔴 ACCESS ERROR: Boarding pass lookup error.")
                         }
-
-                        setGateState("success")
-                        setGateMatchConfidence(97.8)
-                        addLog("🟢 CLEARANCE CONFIRMED. COMPLIANCE ENTRANCE OPENED.")
-
-                        await dbInsertRow("airport_entries", {
-                            passenger_id: activeMatch.id,
-                            boarding_pass_id: bp.id,
-                            verification_status: "VERIFIED",
-                            entry_gate: "EGATE-A1"
-                        })
-                        await logTravelHistory(activeMatch.id, "EGATE_CLEARED", "EGATE-A1")
-
-                        // Audit
-                        await dbInsertRow("audit_logs", {
-                            user_id: currentUserId,
-                            action: "GATE_ENTRY",
-                            actor: activeMatch.name,
-                            status: "SUCCESS",
-                            description: `Authorized e-gate entry clearance. Gate: EGATE-A1, Score: 97.8%`
-                        })
-
-                        if (currentUserId) {
-                            await loadPassengerProfile(currentUserId)
-                        }
-                        syncSystemData()
-
                     }, 1200)
-                }, 1200)
+                } catch (error) {
+                    console.error("Gate simulation stage 1 failed:", error)
+                    setGateState("denied")
+                    addLog("🔴 ACCESS ERROR: Passport registry search error.")
+                }
             }, 1200)
         }, 1200)
     }
@@ -1248,13 +1277,10 @@ export default function Home() {
     // BOARDING GATE SIMULATION ACTIONS
     // -------------------------------------------------------------
     const runBoardingGateSimulation = async () => {
-        if (boardState === "completed" || boardState === "error") {
-            setBoardLogs([])
-            setBoardState("idle")
-            addTerminalLog("Boarding Gate simulator reset. Standing by...")
+        if (boardState === "matching" || boardState === "cleared") {
             return
         }
-        if (boardState !== "idle") return
+
         setBoardLogs([])
         setBoardState("matching")
         const addLog = (m: string) => setBoardLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${m}`])
@@ -1262,49 +1288,61 @@ export default function Home() {
         addLog("🛫 Connecting boarding gate biometric sensors...")
 
         setTimeout(async () => {
-            const passengers = await dbGetRows("passengers")
-            const boardingPasses = await dbGetRows("boarding_passes")
+            try {
+                const passengers = await dbGetRows("passengers")
+                const boardingPasses = await dbGetRows("boarding_passes")
 
-            let boardUser = profileData ? profileData.passenger : (passengers.length > 0 ? passengers[passengers.length - 1] : null)
+                let boardUser = profileData ? profileData.passenger : (passengers.length > 0 ? passengers[passengers.length - 1] : null)
 
-            if (!boardUser) {
-                setBoardState("error")
-                addLog("🔴 BOARDING FAILED: Registry database profile missing.")
-                return
-            }
-
-            const bp = boardingPasses.find(b => b.passenger_id === boardUser.id)
-            if (!bp) {
-                setBoardState("error")
-                addLog("🔴 BOARDING FAILED: Boarding ticket pass not allocated in database.")
-                return
-            }
-
-            setBoardState("cleared")
-            addLog(`🟢 Face match confirmed for passenger: ${boardUser.name.toUpperCase()}`)
-            addLog(`🟢 Seat mapping allocated: ${bp.seat_number}`)
-
-            setTimeout(async () => {
-                setBoardState("completed")
-                addLog("🟢 BOARDING COMPLETE. Flight journey record successfully logged.")
-
-                await logBoardingGateEvent(boardUser.id, bp.id, "BOARDED")
-                await logTravelHistory(boardUser.id, "BOARDED", "GATE B12")
-
-                // Audit
-                await dbInsertRow("audit_logs", {
-                    user_id: currentUserId,
-                    action: "BOARDING_COMPLETE",
-                    actor: boardUser.name,
-                    status: "SUCCESS",
-                    description: `Passenger boarded successfully on linked journey. Seat: ${bp.seat_number}`
-                })
-
-                if (currentUserId) {
-                    await loadPassengerProfile(currentUserId)
+                if (!boardUser) {
+                    setBoardState("error")
+                    addLog("🔴 BOARDING FAILED: Registry database profile missing.")
+                    return
                 }
-                syncSystemData()
-            }, 1500)
+
+                const bp = boardingPasses.find(b => b.passenger_id === boardUser.id)
+                if (!bp) {
+                    setBoardState("error")
+                    addLog("🔴 BOARDING FAILED: Boarding ticket pass not allocated in database.")
+                    return
+                }
+
+                setBoardState("cleared")
+                addLog(`🟢 Face match confirmed for passenger: ${boardUser.name.toUpperCase()}`)
+                addLog(`🟢 Seat mapping allocated: ${bp.seat_number}`)
+
+                setTimeout(async () => {
+                    try {
+                        setBoardState("completed")
+                        addLog("🟢 BOARDING COMPLETE. Flight journey record successfully logged.")
+
+                        await logBoardingGateEvent(boardUser.id, bp.id, "BOARDED")
+                        await logTravelHistory(boardUser.id, "BOARDED", "GATE B12")
+
+                        // Audit
+                        await dbInsertRow("audit_logs", {
+                            user_id: currentUserId,
+                            action: "BOARDING_COMPLETE",
+                            actor: boardUser.name,
+                            status: "SUCCESS",
+                            description: `Passenger boarded successfully on linked journey. Seat: ${bp.seat_number}`
+                        })
+
+                        if (currentUserId) {
+                            await loadPassengerProfile(currentUserId)
+                        }
+                        syncSystemData()
+                    } catch (error) {
+                        console.error("Boarding phase 2 failed:", error)
+                        setBoardState("error")
+                        addLog("🔴 BOARDING ERROR: Verification transaction storage failed.")
+                    }
+                }, 1500)
+            } catch (error) {
+                console.error("Boarding phase 1 failed:", error)
+                setBoardState("error")
+                addLog("🔴 BOARDING ERROR: Biometric credentials database search failed.")
+            }
         }, 1500)
     }
 
@@ -2394,8 +2432,23 @@ export default function Home() {
                                             )}
                                         </div>
 
-                                        <button onClick={runCameraLivenessMatchCheck} disabled={cameraState !== "idle"} className="w-full bg-indigo-600 hover:bg-indigo-550 disabled:bg-slate-850 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all">
-                                            <PlayCircle className="w-4 h-4" /> Start Identity Verification scan
+                                        <button 
+                                            onClick={runCameraLivenessMatchCheck} 
+                                            disabled={cameraState === "scanning" || cameraState === "matching"} 
+                                            className={`w-full font-bold py-3 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
+                                                cameraState === "success" 
+                                                    ? "bg-emerald-600 hover:bg-emerald-550 text-white animate-pulse" 
+                                                    : cameraState === "failed"
+                                                        ? "bg-rose-600 hover:bg-rose-550 text-white animate-pulse"
+                                                        : "bg-indigo-600 hover:bg-indigo-550 text-white disabled:bg-slate-850"
+                                            }`}
+                                        >
+                                            <PlayCircle className="w-4 h-4" /> 
+                                            {cameraState === "success" || cameraState === "failed" 
+                                                ? "Reset & Rescan" 
+                                                : cameraState === "scanning" || cameraState === "matching"
+                                                    ? "Scanning..."
+                                                    : "Start Identity Verification Scan"}
                                         </button>
                                     </div>
 
@@ -2634,26 +2687,51 @@ export default function Home() {
                                             </div>
                                             <button 
                                                 onClick={async () => {
-                                                    if (!screenPassengerId) return
-                                                    await logSecurityCheck(screenPassengerId, screenRiskScore, screenNotes)
-                                                    
-                                                    // Audit
-                                                    const targetTrav = travelers.find(t => t.id === screenPassengerId)
-                                                    await dbInsertRow("audit_logs", {
-                                                        user_id: currentUserId,
-                                                        action: "RISK_AUDIT_UPDATE",
-                                                        actor: targetTrav?.name || "System Officer",
-                                                        status: "SUCCESS",
-                                                        description: `Officer updated risk clearance settings. Score: ${screenRiskScore}%, Tag: ${screenStatus}`
-                                                    })
+                                                    if (!screenPassengerId || isSavingRisk) return
+                                                    setIsSavingRisk(true)
+                                                    setRiskSavedSuccess(false)
+                                                    try {
+                                                        await logSecurityCheck(screenPassengerId, screenRiskScore, screenNotes)
+                                                        
+                                                        // Audit
+                                                        const targetTrav = travelers.find(t => t.id === screenPassengerId)
+                                                        await dbInsertRow("audit_logs", {
+                                                            user_id: currentUserId,
+                                                            action: "RISK_AUDIT_UPDATE",
+                                                            actor: targetTrav?.name || "System Officer",
+                                                            status: "SUCCESS",
+                                                            description: `Officer updated risk clearance settings. Score: ${screenRiskScore}%, Tag: ${screenStatus}`
+                                                        })
 
-                                                    addTerminalLog("Manually updated passenger security risk score.")
-                                                    syncSystemData()
+                                                        addTerminalLog("Manually updated passenger security risk score.")
+                                                        syncSystemData()
+                                                        setRiskSavedSuccess(true)
+                                                        setTimeout(() => setRiskSavedSuccess(false), 3000)
+                                                    } catch (err) {
+                                                        console.error("Manual risk assessment update failed:", err)
+                                                        alert("Database update failed. Please check table definitions.")
+                                                    } finally {
+                                                        setIsSavingRisk(false)
+                                                    }
                                                 }}
-                                                disabled={!screenPassengerId}
-                                                className="w-full bg-indigo-600 hover:bg-indigo-550 text-white font-bold py-2 rounded text-xs uppercase"
+                                                disabled={!screenPassengerId || isSavingRisk}
+                                                className={`w-full font-bold py-2.5 rounded-xl text-xs uppercase font-mono transition-all flex items-center justify-center gap-1.5 ${
+                                                    riskSavedSuccess 
+                                                        ? "bg-emerald-600 hover:bg-emerald-550 text-white animate-pulse" 
+                                                        : "bg-indigo-600 hover:bg-indigo-550 text-white disabled:bg-slate-850"
+                                                }`}
                                             >
-                                                Log Risk Assessment
+                                                {isSavingRisk ? (
+                                                    <>
+                                                        <Aperture className="w-3.5 h-3.5 animate-spin" /> Saving...
+                                                    </>
+                                                ) : riskSavedSuccess ? (
+                                                    <>
+                                                        <Check className="w-3.5 h-3.5" /> Assessment Logged
+                                                    </>
+                                                ) : (
+                                                    "Log Risk Assessment"
+                                                )}
                                             </button>
                                         </div>
                                     </div>
